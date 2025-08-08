@@ -1,1 +1,1 @@
-
+loadstring(game:HttpGet("https://raw.githubusercontent.com/salmonman4/Nexis-Hub/main/Nexis%20Hub%20Main"))()
