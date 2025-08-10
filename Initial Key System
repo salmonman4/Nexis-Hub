@@ -1,0 +1,749 @@
+--// Nexis Hub Key System //--
+
+local HttpService = game:GetService('HttpService')
+local TweenService = game:GetService('TweenService')
+local Players = game:GetService('Players')
+local RunService = game:GetService('RunService')
+
+-- HTTP Request Handler
+local req = syn and syn.request or http_request or request
+if not req then
+    error('Your executor does not support HTTP requests.')
+end
+
+-- Color System
+local Colors = {
+    -- Primary Palette
+    Background = Color3.fromRGB(12, 12, 14),
+    Surface = Color3.fromRGB(18, 18, 21),
+    SurfaceLight = Color3.fromRGB(24, 24, 28),
+
+    -- Accent Colors
+    Primary = Color3.fromRGB(110, 84, 247),
+    PrimaryDark = Color3.fromRGB(95, 70, 220),
+    PrimaryLight = Color3.fromRGB(125, 100, 255),
+
+    -- Status Colors
+    Success = Color3.fromRGB(52, 211, 153),
+    Warning = Color3.fromRGB(251, 191, 36),
+    Danger = Color3.fromRGB(239, 68, 68),
+
+    -- Text Hierarchy
+    TextPrimary = Color3.fromRGB(248, 248, 252),
+    TextSecondary = Color3.fromRGB(148, 148, 158),
+    TextMuted = Color3.fromRGB(88, 88, 98),
+
+    -- Special
+    Border = Color3.fromRGB(28, 28, 33),
+    Glow = Color3.fromRGB(110, 84, 247),
+}
+
+-- Create Main GUI
+local ScreenGui = Instance.new('ScreenGui')
+ScreenGui.Name = 'NexisHub_KeySystem'
+ScreenGui.ResetOnSpawn = false
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.DisplayOrder = 10
+
+-- Background Frame (replaces BlurFrame for cleanliness)
+local BackgroundFrame = Instance.new('Frame')
+BackgroundFrame.Name = 'BackgroundFrame'
+BackgroundFrame.Size = UDim2.new(1, 0, 1, 0)
+BackgroundFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+BackgroundFrame.BackgroundTransparency = 1 -- Kept transparent as requested
+BackgroundFrame.Parent = ScreenGui
+
+-- Main Window Container
+local MainWindow = Instance.new('Frame')
+MainWindow.Name = 'MainWindow'
+MainWindow.Size = UDim2.new(0, 460, 0, 320)
+MainWindow.Position = UDim2.new(0.5, -230, 0.5, -160)
+MainWindow.BackgroundColor3 = Colors.Background
+MainWindow.BorderSizePixel = 0
+MainWindow.ClipsDescendants = true
+MainWindow.Active = true
+MainWindow.Draggable = true
+
+-- Window Corner Radius
+local WindowCorner = Instance.new('UICorner')
+WindowCorner.CornerRadius = UDim.new(0, 16)
+WindowCorner.Parent = MainWindow
+
+-- Window Border Stroke
+local WindowStroke = Instance.new('UIStroke')
+WindowStroke.Color = Colors.Border
+WindowStroke.Thickness = 1
+WindowStroke.Transparency = 0.8 -- Made more subtle
+WindowStroke.Parent = MainWindow
+
+-- Header Container
+local HeaderContainer = Instance.new('Frame')
+HeaderContainer.Name = 'HeaderContainer'
+HeaderContainer.Size = UDim2.new(1, 0, 0, 80)
+HeaderContainer.BackgroundTransparency = 1
+HeaderContainer.Parent = MainWindow
+
+-- Logo Icon Container
+local LogoContainer = Instance.new('Frame')
+LogoContainer.Name = 'LogoContainer'
+LogoContainer.Size = UDim2.new(0, 50, 0, 50)
+LogoContainer.Position = UDim2.new(0, 45, 0, 15)
+LogoContainer.BackgroundColor3 = Colors.Primary
+LogoContainer.BackgroundTransparency = 0.9
+LogoContainer.Parent = HeaderContainer
+
+local LogoCorner = Instance.new('UICorner')
+LogoCorner.CornerRadius = UDim.new(0, 12)
+LogoCorner.Parent = LogoContainer
+
+local LogoIcon = Instance.new('TextLabel')
+LogoIcon.Size = UDim2.new(1, 0, 1, 0)
+LogoIcon.BackgroundTransparency = 1
+LogoIcon.Font = Enum.Font.GothamBold
+LogoIcon.Text = 'N'
+LogoIcon.TextColor3 = Colors.TextPrimary -- Changed for visibility
+LogoIcon.TextSize = 24
+LogoIcon.Parent = LogoContainer
+
+-- Title Section
+local TitleFrame = Instance.new('Frame')
+TitleFrame.Size = UDim2.new(1, -150, 0, 50)
+TitleFrame.Position = UDim2.new(0, 110, 0, 15)
+TitleFrame.BackgroundTransparency = 1
+TitleFrame.Parent = HeaderContainer
+
+local MainTitle = Instance.new('TextLabel')
+MainTitle.Name = 'MainTitle'
+MainTitle.Size = UDim2.new(1, 0, 0, 28)
+MainTitle.BackgroundTransparency = 1
+MainTitle.Font = Enum.Font.GothamBold
+MainTitle.Text = 'Nexis Hub'
+MainTitle.TextColor3 = Colors.TextPrimary
+MainTitle.TextSize = 22
+MainTitle.TextXAlignment = Enum.TextXAlignment.Left
+MainTitle.Parent = TitleFrame
+
+local SubTitle = Instance.new('TextLabel')
+SubTitle.Name = 'SubTitle'
+SubTitle.Size = UDim2.new(1, 0, 0, 20)
+SubTitle.Position = UDim2.new(0, 0, 0, 26)
+SubTitle.BackgroundTransparency = 1
+SubTitle.Font = Enum.Font.Gotham
+SubTitle.Text = 'Key System' -- Changed
+SubTitle.TextColor3 = Colors.TextSecondary
+SubTitle.TextSize = 13
+SubTitle.TextXAlignment = Enum.TextXAlignment.Left
+SubTitle.Parent = TitleFrame
+
+-- Close Button
+local CloseButton = Instance.new('TextButton')
+CloseButton.Name = 'CloseButton'
+CloseButton.Size = UDim2.new(0, 36, 0, 36)
+CloseButton.Position = UDim2.new(1, -50, 0, 22)
+CloseButton.BackgroundColor3 = Colors.Surface
+CloseButton.BackgroundTransparency = 1 -- Cleaner default state
+CloseButton.BorderSizePixel = 0
+CloseButton.Font = Enum.Font.Gotham
+CloseButton.Text = '✕'
+CloseButton.TextColor3 = Colors.TextSecondary
+CloseButton.TextSize = 16
+CloseButton.AutoButtonColor = false
+CloseButton.Parent = HeaderContainer
+
+local CloseCorner = Instance.new('UICorner')
+CloseCorner.CornerRadius = UDim.new(0, 8)
+CloseCorner.Parent = CloseButton
+
+-- Divider Line
+local Divider = Instance.new('Frame')
+Divider.Name = 'Divider'
+Divider.Size = UDim2.new(1, -90, 0, 1)
+Divider.Position = UDim2.new(0, 45, 0, 80)
+Divider.BackgroundColor3 = Colors.Border
+Divider.BorderSizePixel = 0
+Divider.Parent = MainWindow
+
+-- Input Container
+local InputSection = Instance.new('Frame')
+InputSection.Name = 'InputSection'
+InputSection.Size = UDim2.new(1, -90, 0, 55)
+InputSection.Position = UDim2.new(0, 45, 0, 100)
+InputSection.BackgroundTransparency = 1
+InputSection.Parent = MainWindow
+
+local InputLabel = Instance.new('TextLabel')
+InputLabel.Size = UDim2.new(1, 0, 0, 16)
+InputLabel.BackgroundTransparency = 1
+InputLabel.Font = Enum.Font.Gotham
+InputLabel.Text = 'LICENSE KEY'
+InputLabel.TextColor3 = Colors.TextMuted
+InputLabel.TextSize = 11
+InputLabel.TextXAlignment = Enum.TextXAlignment.Left
+InputLabel.Parent = InputSection
+
+local InputField = Instance.new('Frame')
+InputField.Size = UDim2.new(1, 0, 0, 38)
+InputField.Position = UDim2.new(0, 0, 0, 18)
+InputField.BackgroundColor3 = Colors.Surface
+InputField.BorderSizePixel = 0
+InputField.Parent = InputSection
+
+local InputFieldCorner = Instance.new('UICorner')
+InputFieldCorner.CornerRadius = UDim.new(0, 10)
+InputFieldCorner.Parent = InputField
+
+local InputFieldStroke = Instance.new('UIStroke')
+InputFieldStroke.Color = Colors.Border
+InputFieldStroke.Thickness = 1
+InputFieldStroke.Transparency = 0.7
+InputFieldStroke.Parent = InputField
+
+local KeyTextBox = Instance.new('TextBox')
+KeyTextBox.Name = 'KeyInput'
+KeyTextBox.Size = UDim2.new(1, -24, 1, 0)
+KeyTextBox.Position = UDim2.new(0, 12, 0, 0)
+KeyTextBox.BackgroundTransparency = 1
+KeyTextBox.Font = Enum.Font.Gotham
+KeyTextBox.PlaceholderText = 'Enter your license key...'
+KeyTextBox.PlaceholderColor3 = Colors.TextMuted
+KeyTextBox.Text = ''
+KeyTextBox.TextColor3 = Colors.TextPrimary
+KeyTextBox.TextSize = 14
+KeyTextBox.TextXAlignment = Enum.TextXAlignment.Left
+KeyTextBox.ClearTextOnFocus = false
+KeyTextBox.Parent = InputField
+
+-- Button Container
+local ButtonSection = Instance.new('Frame')
+ButtonSection.Name = 'ButtonSection'
+ButtonSection.Size = UDim2.new(1, -90, 0, 45)
+ButtonSection.Position = UDim2.new(0, 45, 0, 170)
+ButtonSection.BackgroundTransparency = 1
+ButtonSection.Parent = MainWindow
+
+-- Verify Button (Primary)
+local VerifyButton = Instance.new('TextButton')
+VerifyButton.Name = 'VerifyButton'
+VerifyButton.Size = UDim2.new(0.58, -5, 1, 0)
+VerifyButton.BackgroundColor3 = Colors.Primary
+VerifyButton.BorderSizePixel = 0
+VerifyButton.Font = Enum.Font.GothamBold
+VerifyButton.Text = 'Verify Key'
+VerifyButton.TextColor3 = Colors.TextPrimary
+VerifyButton.TextSize = 14
+VerifyButton.AutoButtonColor = false
+VerifyButton.Parent = ButtonSection
+
+local VerifyCorner = Instance.new('UICorner')
+VerifyCorner.CornerRadius = UDim.new(0, 10)
+VerifyCorner.Parent = VerifyButton
+
+-- Get Key Button (Secondary)
+local GetKeyButton = Instance.new('TextButton')
+GetKeyButton.Name = 'GetKeyButton'
+GetKeyButton.Size = UDim2.new(0.42, -5, 1, 0)
+GetKeyButton.Position = UDim2.new(0.58, 5, 0, 0)
+GetKeyButton.BackgroundColor3 = Colors.Surface
+GetKeyButton.BorderSizePixel = 0
+GetKeyButton.Font = Enum.Font.Gotham
+GetKeyButton.Text = 'Get Key'
+GetKeyButton.TextColor3 = Colors.TextSecondary
+GetKeyButton.TextSize = 14
+GetKeyButton.AutoButtonColor = false
+GetKeyButton.Parent = ButtonSection
+
+local GetKeyCorner = Instance.new('UICorner')
+GetKeyCorner.CornerRadius = UDim.new(0, 10)
+GetKeyCorner.Parent = GetKeyButton
+
+local GetKeyStroke = Instance.new('UIStroke')
+GetKeyStroke.Color = Colors.Border
+GetKeyStroke.Thickness = 1
+GetKeyStroke.Transparency = 0.7
+GetKeyStroke.Parent = GetKeyButton
+
+-- Status Container
+local StatusSection = Instance.new('Frame')
+StatusSection.Name = 'StatusSection'
+StatusSection.Size = UDim2.new(1, -90, 0, 60)
+StatusSection.Position = UDim2.new(0, 45, 0, 230)
+StatusSection.BackgroundTransparency = 1
+StatusSection.Parent = MainWindow
+
+-- Status Indicator
+local StatusIndicator = Instance.new('Frame')
+StatusIndicator.Name = 'StatusIndicator'
+StatusIndicator.Size = UDim2.new(0, 6, 0, 6)
+StatusIndicator.Position = UDim2.new(0, 0, 0, 7)
+StatusIndicator.BackgroundColor3 = Colors.TextMuted
+StatusIndicator.BorderSizePixel = 0
+StatusIndicator.Parent = StatusSection
+
+local StatusDot = Instance.new('UICorner')
+StatusDot.CornerRadius = UDim.new(1, 0)
+StatusDot.Parent = StatusIndicator
+
+local StatusText = Instance.new('TextLabel')
+StatusText.Name = 'StatusText'
+StatusText.Size = UDim2.new(1, -20, 0, 20)
+StatusText.Position = UDim2.new(0, 14, 0, 0)
+StatusText.BackgroundTransparency = 1
+StatusText.Font = Enum.Font.Gotham
+StatusText.Text = 'Ready for authentication'
+StatusText.TextColor3 = Colors.TextSecondary
+StatusText.TextSize = 13
+StatusText.TextXAlignment = Enum.TextXAlignment.Left
+StatusText.Parent = StatusSection
+
+local StatusDetail = Instance.new('TextLabel')
+StatusDetail.Name = 'StatusDetail'
+StatusDetail.Size = UDim2.new(1, -20, 0, 16)
+StatusDetail.Position = UDim2.new(0, 14, 0, 20)
+StatusDetail.BackgroundTransparency = 1
+StatusDetail.Font = Enum.Font.Gotham
+StatusDetail.Text = ''
+StatusDetail.TextColor3 = Colors.TextMuted
+StatusDetail.TextSize = 11
+StatusDetail.TextXAlignment = Enum.TextXAlignment.Left
+StatusDetail.Parent = StatusSection
+
+-- Loading Spinner Container
+local LoadingContainer = Instance.new('Frame')
+LoadingContainer.Name = 'LoadingContainer'
+LoadingContainer.Size = UDim2.new(0, 20, 0, 20)
+LoadingContainer.Position = UDim2.new(1, -30, 0, 0)
+LoadingContainer.BackgroundTransparency = 1
+LoadingContainer.Visible = false
+LoadingContainer.Parent = StatusSection
+
+local LoadingSpinner = Instance.new('ImageLabel')
+LoadingSpinner.Size = UDim2.new(1, 0, 1, 0)
+LoadingSpinner.BackgroundTransparency = 1
+LoadingSpinner.Image = 'rbxassetid://4483345998'
+LoadingSpinner.ImageColor3 = Colors.Primary
+LoadingSpinner.Parent = LoadingContainer
+
+-- Notification Toast
+local function createToast(message, icon, color)
+    local Toast = Instance.new('Frame')
+    Toast.Size = UDim2.new(0, 280, 0, 60)
+    Toast.Position = UDim2.new(0.5, -140, 0, -80)
+    Toast.BackgroundColor3 = Colors.Surface
+    Toast.BorderSizePixel = 0
+    Toast.Parent = MainWindow
+
+    local ToastCorner = Instance.new('UICorner')
+    ToastCorner.CornerRadius = UDim.new(0, 12)
+    ToastCorner.Parent = Toast
+
+    local ToastStroke = Instance.new('UIStroke')
+    ToastStroke.Color = color or Colors.Primary
+    ToastStroke.Thickness = 1
+    ToastStroke.Transparency = 0.5
+    ToastStroke.Parent = Toast
+
+    local ToastIcon = Instance.new('TextLabel')
+    ToastIcon.Size = UDim2.new(0, 40, 0, 40)
+    ToastIcon.Position = UDim2.new(0, 10, 0, 10)
+    ToastIcon.BackgroundTransparency = 1
+    ToastIcon.Font = Enum.Font.Gotham
+    ToastIcon.Text = icon or '✓'
+    ToastIcon.TextColor3 = color or Colors.Primary
+    ToastIcon.TextSize = 20
+    ToastIcon.Parent = Toast
+
+    local ToastText = Instance.new('TextLabel')
+    ToastText.Size = UDim2.new(1, -60, 1, 0)
+    ToastText.Position = UDim2.new(0, 50, 0, 0)
+    ToastText.BackgroundTransparency = 1
+    ToastText.Font = Enum.Font.Gotham
+    ToastText.Text = message
+    ToastText.TextColor3 = Colors.TextPrimary
+    ToastText.TextSize = 13
+    ToastText.TextXAlignment = Enum.TextXAlignment.Left
+    ToastText.Parent = Toast
+
+    -- Animate in
+    TweenService
+        :Create(
+            Toast,
+            TweenInfo.new(0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
+            { Position = UDim2.new(0.5, -140, 0, 20) }
+        )
+        :Play()
+
+    -- Auto dismiss
+    task.wait(2.5)
+    TweenService
+        :Create(
+            Toast,
+            TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.In),
+            {
+                Position = UDim2.new(0.5, -140, 0, -80),
+                BackgroundTransparency = 1,
+            }
+        )
+        :Play()
+
+    task.wait(0.3)
+    Toast:Destroy()
+end
+
+-- Status Update Function
+local function updateStatus(status, detail, color, showLoading)
+    StatusText.Text = status
+    StatusDetail.Text = detail or ''
+    StatusIndicator.BackgroundColor3 = color or Colors.TextMuted
+    LoadingContainer.Visible = showLoading or false
+
+    if showLoading then
+        local rotation = 0
+        local spinConnection
+        spinConnection = RunService.Heartbeat:Connect(function()
+            rotation = rotation + 3
+            LoadingSpinner.Rotation = rotation
+            if not LoadingContainer.Visible then
+                spinConnection:Disconnect()
+            end
+        end)
+    end
+
+    -- Animate status indicator
+    TweenService
+        :Create(
+            StatusIndicator,
+            TweenInfo.new(0.3, Enum.EasingStyle.Quad),
+            { Size = UDim2.new(0, 8, 0, 8) }
+        )
+        :Play()
+
+    task.wait(0.15)
+
+    TweenService
+        :Create(
+            StatusIndicator,
+            TweenInfo.new(0.3, Enum.EasingStyle.Quad),
+            { Size = UDim2.new(0, 6, 0, 6) }
+        )
+        :Play()
+end
+
+-- Enhanced Button Animations
+local function setupButtonAnimation(button, isPrimary)
+    local originalColor = button.BackgroundColor3
+    local originalSize = button.Size
+
+    button.MouseEnter:Connect(function()
+        TweenService
+            :Create(button, TweenInfo.new(0.2, Enum.EasingStyle.Quart), {
+                BackgroundColor3 = isPrimary and Colors.PrimaryLight
+                    or Colors.SurfaceLight,
+                Size = UDim2.new(
+                    originalSize.X.Scale,
+                    originalSize.X.Offset,
+                    originalSize.Y.Scale,
+                    originalSize.Y.Offset + 2
+                ),
+            })
+            :Play()
+    end)
+
+    button.MouseLeave:Connect(function()
+        TweenService
+            :Create(button, TweenInfo.new(0.2, Enum.EasingStyle.Quart), {
+                BackgroundColor3 = originalColor,
+                Size = originalSize,
+            })
+            :Play()
+    end)
+
+    button.MouseButton1Down:Connect(function()
+        TweenService
+            :Create(button, TweenInfo.new(0.1, Enum.EasingStyle.Quad), {
+                Size = UDim2.new(
+                    originalSize.X.Scale * 0.98,
+                    originalSize.X.Offset,
+                    originalSize.Y.Scale * 0.95,
+                    originalSize.Y.Offset
+                ),
+            })
+            :Play()
+    end)
+
+    button.MouseButton1Up:Connect(function()
+        TweenService
+            :Create(
+                button,
+                TweenInfo.new(0.1, Enum.EasingStyle.Quad),
+                { Size = originalSize }
+            )
+            :Play()
+    end)
+end
+
+setupButtonAnimation(VerifyButton, true)
+setupButtonAnimation(GetKeyButton, false)
+
+-- Input Field Focus Animation
+KeyTextBox.Focused:Connect(function()
+    TweenService
+        :Create(
+            InputFieldStroke,
+            TweenInfo.new(0.2, Enum.EasingStyle.Quad),
+            { Color = Colors.Primary, Transparency = 0 }
+        )
+        :Play()
+end)
+
+KeyTextBox.FocusLost:Connect(function()
+    TweenService
+        :Create(
+            InputFieldStroke,
+            TweenInfo.new(0.2, Enum.EasingStyle.Quad),
+            { Color = Colors.Border, Transparency = 0.7 }
+        )
+        :Play()
+end)
+
+-- Close Button Animation
+CloseButton.MouseEnter:Connect(function()
+    TweenService
+        :Create(CloseButton, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {
+            BackgroundColor3 = Colors.Danger,
+            BackgroundTransparency = 0,
+            TextColor3 = Colors.TextPrimary,
+        })
+        :Play()
+end)
+
+CloseButton.MouseLeave:Connect(function()
+    TweenService
+        :Create(CloseButton, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {
+            BackgroundColor3 = Colors.Surface,
+            BackgroundTransparency = 1, -- Updated
+            TextColor3 = Colors.TextSecondary,
+        })
+        :Play()
+end)
+
+-- Close Functionality
+CloseButton.MouseButton1Click:Connect(function()
+    -- Fade out window
+    TweenService
+        :Create(
+            MainWindow,
+            TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.In),
+            { Size = UDim2.new(0, 460, 0, 0), BackgroundTransparency = 1 }
+        )
+        :Play()
+
+    task.wait(0.3)
+    ScreenGui:Destroy()
+end)
+
+-- Get Key Functionality
+GetKeyButton.MouseButton1Click:Connect(function()
+    setclipboard('https://nexishubkeyapi.daniel-hackimian.workers.dev/start')
+    createToast('Key link copied to clipboard', '📋', Colors.Success)
+    updateStatus(
+        'Link copied',
+        'Paste in your browser to get a key',
+        Colors.Success
+    )
+end)
+
+-- Verify Key Functionality
+VerifyButton.MouseButton1Click:Connect(function()
+    local key = KeyTextBox.Text
+
+    if key == '' or key:len() < 5 then
+        updateStatus(
+            'Invalid input',
+            'Please enter a valid license key',
+            Colors.Danger
+        )
+
+        -- Shake animation for input field
+        local originalPos = InputField.Position
+        for i = 1, 3 do
+            TweenService
+                :Create(InputField, TweenInfo.new(0.05, Enum.EasingStyle.Linear), {
+                    Position = UDim2.new(
+                        originalPos.X.Scale,
+                        originalPos.X.Offset - 5,
+                        originalPos.Y.Scale,
+                        originalPos.Y.Offset
+                    ),
+                })
+                :Play()
+            task.wait(0.05)
+            TweenService
+                :Create(InputField, TweenInfo.new(0.05, Enum.EasingStyle.Linear), {
+                    Position = UDim2.new(
+                        originalPos.X.Scale,
+                        originalPos.X.Offset + 5,
+                        originalPos.Y.Scale,
+                        originalPos.Y.Offset
+                    ),
+                })
+                :Play()
+            task.wait(0.05)
+        end
+        InputField.Position = originalPos
+        return
+    end
+
+    -- Start verification process
+    updateStatus(
+        'Authenticating',
+        'Verifying license key...',
+        Colors.Primary,
+        true
+    )
+    VerifyButton.Text = 'Verifying...'
+    VerifyButton.TextColor3 = Colors.TextSecondary
+
+    local hwid = game:GetService('RbxAnalyticsService'):GetClientId()
+    local execName = identifyexecutor and identifyexecutor() or 'Unknown'
+
+    task.wait(0.5) -- Small delay for better UX
+
+    local success, response = pcall(function()
+        return req({
+            Url = 'https://nexishubkeyapi.daniel-hackimian.workers.dev/issue',
+            Method = 'POST',
+            Headers = {
+                ['Content-Type'] = 'application/json',
+            },
+            Body = HttpService:JSONEncode({
+                key = key,
+                hwid = hwid,
+                exec = execName,
+            }),
+        })
+    end)
+
+    if not success or not response.Success then
+        updateStatus(
+            'Connection failed',
+            'Unable to reach authentication server',
+            Colors.Danger
+        )
+        VerifyButton.Text = 'Verify Key'
+        VerifyButton.TextColor3 = Colors.TextPrimary
+        return
+    end
+
+    local data = HttpService:JSONDecode(response.Body)
+
+    if data.ok then
+        updateStatus(
+            'Authentication successful',
+            'Loading resources...', -- Changed
+            Colors.Success
+        )
+        createToast('Welcome to Nexis Hub', '✨', Colors.Success) -- Changed
+        VerifyButton.Text = 'Success!'
+        VerifyButton.BackgroundColor3 = Colors.Success
+
+        task.wait(1)
+
+        -- Success animation
+        TweenService
+            :Create(
+                MainWindow,
+                TweenInfo.new(
+                    0.5,
+                    Enum.EasingStyle.Back,
+                    Enum.EasingDirection.In
+                ),
+                {
+                    Size = UDim2.new(0, 460, 0, 0),
+                    Position = UDim2.new(0.5, -230, 0.5, 0),
+                }
+            )
+            :Play()
+
+        -- Load payload
+        task.wait(0.5)
+        local payloadRes = req({
+            Url = 'https://raw.githubusercontent.com/salmonman4/Nexis-Hub/refs/heads/main/Nexis%20Hub%20Redirect',
+            Method = 'GET',
+        })
+
+        if payloadRes.Success then
+            loadstring(payloadRes.Body)()
+            task.wait(0.5)
+            ScreenGui:Destroy()
+        else
+            updateStatus(
+                'Script load failed',
+                'Please try again',
+                Colors.Danger
+            )
+            VerifyButton.Text = 'Verify Key'
+            VerifyButton.TextColor3 = Colors.TextPrimary
+            VerifyButton.BackgroundColor3 = Colors.Primary
+
+            TweenService
+                :Create(MainWindow, TweenInfo.new(0.3, Enum.EasingStyle.Quart), {
+                    Size = UDim2.new(0, 460, 0, 320),
+                    Position = UDim2.new(0.5, -230, 0.5, -160),
+                })
+                :Play()
+        end
+    else
+        updateStatus(
+            'Authentication failed',
+            'Invalid or expired license key',
+            Colors.Danger
+        )
+        VerifyButton.Text = 'Verify Key'
+        VerifyButton.TextColor3 = Colors.TextPrimary
+
+        -- Red flash on input
+        TweenService
+            :Create(
+                InputFieldStroke,
+                TweenInfo.new(0.2, Enum.EasingStyle.Quad),
+                { Color = Colors.Danger, Transparency = 0 }
+            )
+            :Play()
+
+        task.wait(1)
+
+        TweenService
+            :Create(
+                InputFieldStroke,
+                TweenInfo.new(0.3, Enum.EasingStyle.Quad),
+                { Color = Colors.Border, Transparency = 0.7 }
+            )
+            :Play()
+    end
+end)
+
+-- Initialize GUI
+MainWindow.Parent = ScreenGui
+ScreenGui.Parent = game.CoreGui
+
+-- Entrance Animation
+MainWindow.Size = UDim2.new(0, 0, 0, 0)
+MainWindow.BackgroundTransparency = 1
+BackgroundFrame.BackgroundTransparency = 1
+
+task.wait(0.1)
+
+-- No background shadow fade as requested
+
+-- Elegant window entrance
+TweenService
+    :Create(
+        MainWindow,
+        TweenInfo.new(0.6, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
+        { Size = UDim2.new(0, 460, 0, 320), BackgroundTransparency = 0 }
+    )
+    :Play()
+
+-- Focus input field after animation
+task.wait(0.6)
+KeyTextBox:CaptureFocus()
