@@ -1,0 +1,511 @@
+-- Universal AI Chatbot - Nexis Hub using Rayfield UI
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+local Players = game:GetService('Players')
+local LocalPlayer = Players.LocalPlayer
+local HttpService = game:GetService('HttpService')
+local RunService = game:GetService('RunService')
+local TweenService = game:GetService('TweenService') -- Added for facing player
+
+-- Configuration
+local openAIKey = ''
+local respondToAll = false
+local respondToSelected = false
+local selectedPlayer = nil
+local currentHoverPlayer = nil
+local highlightConnections = {}
+local lastMessages = {}
+local chatHistory = { global = {}, users = {} }
+local MAX_HISTORY = 10
+
+-- Extras Config
+local enableContext = false
+local responseCooldown = 0
+local lastResponseTimestamp = 0
+local nearbyOnly = false
+local respondToHashtags = false
+local facePlayerOnResponse = false
+
+-- ChatGPT models & styles
+local chatGPTModels = { 'gpt-4o', 'gpt-4-turbo', 'gpt-3.5-turbo', 'gpt-4' }
+local styles = {
+    { Name = 'Friendly', Prompt = 'Respond in a friendly, casual tone.' },
+    {
+        Name = 'Professional',
+        Prompt = 'Respond in a formal, professional manner.',
+    },
+    { Name = 'Humorous', Prompt = 'Respond with a humorous tone.' },
+    { Name = 'Sarcastic', Prompt = 'Respond with a sarcastic, witty tone.' },
+    {
+        Name = 'Philosopher',
+        Prompt = 'Respond thoughtfully and philosophically.',
+    },
+    { Name = 'Pirate', Prompt = 'Respond as a swashbuckling pirate.' },
+    { Name = 'Annoyed', Prompt = 'Respond with a grumpy, annoyed tone.' },
+    { Name = 'Enthusiastic', Prompt = 'Respond with extreme enthusiasm!' },
+    {
+        Name = 'Logical',
+        Prompt = 'Respond strongly with logic, speaking literally.',
+    },
+    {
+        Name = 'Retard',
+        Prompt = 'Respond as a mentally uncapable person essentially braindead or retarded.',
+    },
+    {
+        Name = 'Donald Trump',
+        Prompt = 'Respond fully in the voice of Donald J. Trump. Speak with his trademark style: bold, exaggerated, often aggressive, accusatory, and self-congratulatory. Frequently call out ‘Fake News,’ criticize liberals, and highlight personal greatness. Use classic Trump catchphrases. Write as if posting on Truth Social—short, punchy sentences, occasional ALL CAPS for emphasis, and plenty of exclamation points. Stay unreasonable or combative when needed, always sounding like classic Trump. Make fun of democrats like kamala if mentioned, talk about your wins as president, hate on annoying people. You must keep all responses direct and related to the query, feel free to ramble a bit but do not completely ignore the user. Concise answers, while keeping the trump style intact, under 100 characters',
+    },
+}
+
+-- Create Rayfield Window
+local Window = Rayfield:CreateWindow({
+    Name = 'Universal AI Chatbot - Nexis Hub',
+    LoadingTitle = 'Nexis Hub',
+    LoadingSubtitle = 'AI-Powered Chat',
+    Theme = 'Default',
+    ConfigurationSaving = {
+        Enabled = true,
+        FolderName = 'NexisHub',
+        FileName = 'Config',
+    },
+})
+
+-- Basic Tab
+local BasicTab = Window:CreateTab('Basic', 4483362458)
+local OpenAIKeyInput = BasicTab:CreateInput({
+    Name = 'Input OpenAI Key',
+    PlaceholderText = 'Enter your OpenAI API Key',
+    Flag = 'OpenAIKey',
+    Callback = function(t)
+        openAIKey = t
+    end,
+})
+local RespondAllToggle = BasicTab:CreateToggle({
+    Name = 'Respond to All Players',
+    CurrentValue = false,
+    Flag = 'RespondAll',
+    Callback = function(v)
+        respondToAll = v
+        if v and respondToSelected then
+            RespondSelectedToggle:Set(false)
+        end
+    end,
+})
+local RespondSelectedToggle = BasicTab:CreateToggle({
+    Name = 'Respond to Selected Player',
+    CurrentValue = false,
+    Flag = 'RespondSelected',
+    Callback = function(v)
+        respondToSelected = v
+        if v and respondToAll then
+            RespondAllToggle:Set(false)
+        end
+        if not v then
+            if selectedPlayer then
+                removeHighlightAndTag(selectedPlayer)
+                selectedPlayer = nil
+            end
+            if currentHoverPlayer then
+                removeHighlightAndTag(currentHoverPlayer)
+                currentHoverPlayer = nil
+            end
+        end
+    end,
+})
+local selectedModel = chatGPTModels[1]
+local ModelDropdown = BasicTab:CreateDropdown({
+    Name = 'Select Model',
+    Options = chatGPTModels,
+    CurrentOption = chatGPTModels[1],
+    Flag = 'SelectedModel',
+    Callback = function(o)
+        selectedModel = (type(o) == 'table' and o[1]) or o
+    end,
+})
+local styleNames = {}
+for _, s in ipairs(styles) do
+    table.insert(styleNames, s.Name)
+end
+local selectedStyleName = styleNames[1]
+local StylesDropdown = BasicTab:CreateDropdown({
+    Name = 'Styles',
+    Options = styleNames,
+    CurrentOption = styleNames[1],
+    Flag = 'SelectedStyle',
+    Callback = function(o)
+        selectedStyleName = (type(o) == 'table' and o[1]) or o
+    end,
+})
+local chatStarterOptions = { 'None', 'AI', 'ChatGPT' }
+local selectedChatStarter = chatStarterOptions[1]
+local ChatStarterDropdown = BasicTab:CreateDropdown({
+    Name = 'Chat Starter',
+    Options = chatStarterOptions,
+    CurrentOption = chatStarterOptions[1],
+    Flag = 'ChatStarter',
+    Callback = function(o)
+        selectedChatStarter = (type(o) == 'table' and o[1]) or o
+    end,
+})
+
+-- Extras Tab
+local ExtrasTab = Window:CreateTab('Extras', 5022204128)
+local ContextToggle = ExtrasTab:CreateToggle({
+    Name = 'Enable Context (Memory)',
+    CurrentValue = false,
+    Flag = 'EnableContext',
+    Callback = function(v)
+        enableContext = v
+    end,
+})
+local CooldownInput = ExtrasTab:CreateInput({
+    Name = 'Response Cooldown (Seconds)',
+    PlaceholderText = 'e.g., 5',
+    NumbersOnly = true,
+    Flag = 'ResponseCooldownInput',
+    Callback = function(text)
+        local num = tonumber(text)
+        responseCooldown = (num and num > 0) and num or 0
+    end,
+})
+local NearbyOnlyToggle = ExtrasTab:CreateToggle({
+    Name = 'Respond to Nearby Players Only',
+    CurrentValue = false,
+    Flag = 'NearbyOnly',
+    Callback = function(v)
+        nearbyOnly = v
+    end,
+})
+local RespondToHashtagsToggle = ExtrasTab:CreateToggle({
+    Name = 'Respond to Hashtags',
+    CurrentValue = false,
+    Flag = 'RespondToHashtags',
+    Callback = function(v)
+        respondToHashtags = v
+    end,
+})
+-- [[ NEW ]] Face Player Toggle
+local FacePlayerToggle = ExtrasTab:CreateToggle({
+    Name = 'Face Player When Responding',
+    CurrentValue = false,
+    Flag = 'FacePlayer',
+    Callback = function(v)
+        facePlayerOnResponse = v
+    end,
+})
+
+-- Helper Functions (condensed for brevity)
+local function removeHighlightAndTag(p)
+    if not (p and typeof(p) == 'Instance' and p:IsA('Player')) then
+        return
+    end
+    if highlightConnections[p] then
+        highlightConnections[p]:Disconnect()
+        highlightConnections[p] = nil
+    end
+    if p.Character then
+        for _, v in ipairs(p.Character:GetChildren()) do
+            if v:IsA('Highlight') or v.Name == 'NameTag' then
+                v:Destroy()
+            end
+        end
+    end
+end
+local function handlePlayerSelection()
+    local m = LocalPlayer:GetMouse()
+    RunService.RenderStepped:Connect(function()
+        if not respondToSelected then
+            if currentHoverPlayer then
+                removeHighlightAndTag(currentHoverPlayer)
+                currentHoverPlayer = nil
+            end
+            return
+        end
+        local t = m.Target
+        local n
+        if t and t.Parent and t.Parent:FindFirstChild('Humanoid') then
+            n = Players:GetPlayerFromCharacter(t.Parent)
+        end
+        if n and n == selectedPlayer then
+            n = nil
+        end
+        if n ~= currentHoverPlayer then
+            if currentHoverPlayer then
+                removeHighlightAndTag(currentHoverPlayer)
+            end
+            currentHoverPlayer = n
+            if currentHoverPlayer and currentHoverPlayer.Character then
+                Instance.new('Highlight', currentHoverPlayer.Character).FillColor =
+                    Color3.fromRGB(255, 255, 255)
+            end
+        end
+    end)
+    m.Button1Down:Connect(function()
+        if not respondToSelected or not currentHoverPlayer then
+            return
+        end
+        local p = currentHoverPlayer
+        if selectedPlayer == p then
+            removeHighlightAndTag(p)
+            selectedPlayer = nil
+        else
+            if selectedPlayer then
+                removeHighlightAndTag(selectedPlayer)
+            end
+            removeHighlightAndTag(p)
+            selectedPlayer = p
+            if selectedPlayer.Character then
+                local h = Instance.new('Highlight', selectedPlayer.Character)
+                h.FillColor, h.OutlineColor =
+                    Color3.fromRGB(0, 255, 0), Color3.fromRGB(0, 255, 0)
+                local b = Instance.new('BillboardGui', selectedPlayer.Character)
+                b.Name, b.Size, b.Adornee, b.AlwaysOnTop =
+                    'NameTag',
+                    UDim2.new(0, 200, 0, 50),
+                    selectedPlayer.Character.Head,
+                    true
+                local l = Instance.new('TextLabel', b)
+                l.Size, l.Text, l.BackgroundTransparency =
+                    UDim2.new(1, 0, 1, 0), p.Name, 1
+                highlightConnections[selectedPlayer] = selectedPlayer.Character.AncestryChanged:Connect(
+                    function(_, parent)
+                        if not parent then
+                            removeHighlightAndTag(selectedPlayer)
+                            if selectedPlayer == p then
+                                selectedPlayer = nil
+                            end
+                        end
+                    end
+                )
+            end
+            currentHoverPlayer = nil
+        end
+    end)
+end
+
+-- Universal chat function
+local function sendChatMessage(message)
+    local legacyChat = game:GetService('ReplicatedStorage')
+        :FindFirstChild('DefaultChatSystemChatEvents')
+    if legacyChat and legacyChat:FindFirstChild('SayMessageRequest') then
+        legacyChat.SayMessageRequest:FireServer(message, 'All')
+        return
+    end
+    pcall(function()
+        local generalChannel = game:GetService('TextChatService').TextChannels
+            :WaitForChild('RBXGeneral', 2)
+        if generalChannel then
+            generalChannel:SendAsync(message)
+        end
+    end)
+end
+
+-- OpenAI API call
+local function callOpenAI(model, systemPrompt, messageHistory)
+    local requestFunc = getgenv().request or (syn and syn.request)
+    if not requestFunc then
+        return 'Error: Executor does not support HTTP requests.'
+    end
+    if openAIKey == '' then
+        return 'Error: OpenAI Key not set.'
+    end
+    local messages = { { role = 'system', content = systemPrompt } }
+    for _, msg in ipairs(messageHistory) do
+        table.insert(messages, msg)
+    end
+    local requestBody = { model = model, messages = messages, max_tokens = 60 }
+    local encodedBody = HttpService:JSONEncode(requestBody)
+    local s, r = pcall(function()
+        return requestFunc({
+            Url = 'https://api.openai.com/v1/chat/completions',
+            Method = 'POST',
+            Headers = {
+                ['Content-Type'] = 'application/json',
+                ['Authorization'] = 'Bearer ' .. openAIKey,
+            },
+            Body = encodedBody,
+        })
+    end)
+    if not s or r.StatusCode ~= 200 then
+        warn('Nexis AI - API Error:', r and r.Body or s)
+        return '...'
+    end
+    local b = HttpService:JSONDecode(r.Body)
+    if b and b.choices and #b.choices > 0 then
+        return b.choices[1].message.content:gsub('^%s*', ''):gsub('%s*$', '')
+    else
+        return '...'
+    end
+end
+
+-- Main Chat Handling Logic
+local function handleChatMessage(player, message)
+    if not chatHistory.users[player.UserId] then
+        chatHistory.users[player.UserId] = {}
+    end
+    table.insert(
+        chatHistory.global,
+        { role = 'user', content = player.Name .. ': ' .. message }
+    )
+    table.insert(
+        chatHistory.users[player.UserId],
+        { role = 'user', content = message }
+    )
+    if #chatHistory.global > MAX_HISTORY then
+        table.remove(chatHistory.global, 1)
+    end
+    if #chatHistory.users[player.UserId] > MAX_HISTORY then
+        table.remove(chatHistory.users[player.UserId], 1)
+    end
+    if not respondToHashtags and message:gsub('[#%s]', '') == '' then
+        print('Nexis AI: Hashtag message ignored.')
+        return
+    end
+    local currentTime = tick()
+    if lastMessages[player.UserId] then
+        local l = lastMessages[player.UserId]
+        if message == l.Message and (currentTime - l.Timestamp) < 5 then
+            return
+        end
+    end
+    lastMessages[player.UserId] = { Message = message, Timestamp = currentTime }
+    if respondToAll or (respondToSelected and player == selectedPlayer) then
+        if respondToAll and nearbyOnly then
+            local lc, tc = LocalPlayer.Character, player.Character
+            if
+                lc
+                and tc
+                and lc:FindFirstChild('HumanoidRootPart')
+                and tc:FindFirstChild('HumanoidRootPart')
+            then
+                if
+                    (
+                        lc.HumanoidRootPart.Position
+                        - tc.HumanoidRootPart.Position
+                    ).Magnitude > 20
+                then
+                    print('Nexis AI: Player too far.')
+                    return
+                end
+            else
+                print('Nexis AI: Could not verify distance.')
+                return
+            end
+        end
+        if tick() - lastResponseTimestamp < responseCooldown then
+            print('Nexis AI: Cooldown active.')
+            return
+        end
+        task.spawn(function()
+            local stylePrompt = 'You are a helpful assistant.'
+            for _, s in ipairs(styles) do
+                if s.Name == selectedStyleName then
+                    stylePrompt = s.Prompt
+                    break
+                end
+            end
+            local finalSystemPrompt = stylePrompt
+                .. ' Keep responses extremely short and concise and conversational. Do not use em dashes (—).'
+            local messageHistory = {}
+            if enableContext then
+                if respondToAll then
+                    messageHistory = chatHistory.global
+                else
+                    messageHistory = chatHistory.users[player.UserId]
+                end
+            else
+                table.insert(
+                    messageHistory,
+                    { role = 'user', content = message }
+                )
+            end
+            local response =
+                callOpenAI(selectedModel, finalSystemPrompt, messageHistory)
+            table.insert(
+                chatHistory.global,
+                { role = 'assistant', content = response }
+            )
+            table.insert(
+                chatHistory.users[player.UserId],
+                { role = 'assistant', content = response }
+            )
+            if #chatHistory.global > MAX_HISTORY then
+                table.remove(chatHistory.global, 1)
+            end
+            if #chatHistory.users[player.UserId] > MAX_HISTORY then
+                table.remove(chatHistory.users[player.UserId], 1)
+            end
+
+            -- [[ NEW ]] Face Player Logic
+            if facePlayerOnResponse then
+                local myChar, targetChar =
+                    LocalPlayer.Character, player.Character
+                if
+                    myChar
+                    and targetChar
+                    and myChar:FindFirstChild('HumanoidRootPart')
+                    and targetChar:FindFirstChild('HumanoidRootPart')
+                then
+                    local myHRP, targetHRP =
+                        myChar.HumanoidRootPart, targetChar.HumanoidRootPart
+                    local targetLookPos = Vector3.new(
+                        targetHRP.Position.X,
+                        myHRP.Position.Y,
+                        targetHRP.Position.Z
+                    )
+                    local newCFrame =
+                        CFrame.lookAt(myHRP.Position, targetLookPos)
+                    local tween = TweenService:Create(
+                        myHRP,
+                        TweenInfo.new(0.3, Enum.EasingStyle.Quad),
+                        { CFrame = newCFrame }
+                    )
+                    tween:Play()
+                end
+            end
+
+            local finalMessage = ''
+            if selectedChatStarter == 'AI' then
+                finalMessage = 'AI: ' .. response
+            elseif selectedChatStarter == 'ChatGPT' then
+                finalMessage = 'ChatGPT: ' .. response
+            else
+                finalMessage = response
+            end
+            if #finalMessage > 200 then
+                finalMessage = string.sub(finalMessage, 1, 197) .. '...'
+            end
+            sendChatMessage(finalMessage)
+            lastResponseTimestamp = tick()
+        end)
+    end
+end
+
+-- Attach to chat system listener
+local textChatService = game:GetService('TextChatService')
+if textChatService then
+    textChatService.MessageReceived:Connect(function(m)
+        if m.TextSource then
+            local p = Players:GetPlayerByUserId(m.TextSource.UserId)
+            if p and p ~= LocalPlayer then
+                handleChatMessage(p, m.Text)
+            end
+        end
+    end)
+else
+    local chatEvents = game:GetService('ReplicatedStorage')
+        :FindFirstChild('DefaultChatSystemChatEvents')
+    if chatEvents then
+        chatEvents.OnMessageDoneFiltering:Connect(function(o)
+            local p = Players:GetPlayerByUserId(o.FromSpeakerUserId)
+            if p and p ~= LocalPlayer then
+                handleChatMessage(p, o.Message)
+            end
+        end)
+    else
+        warn('Nexis AI: No chat service found.')
+    end
+end
+
+-- Initialize and Load
+handlePlayerSelection()
+Rayfield:LoadConfiguration()
