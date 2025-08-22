@@ -4,7 +4,7 @@ local Players = game:GetService('Players')
 local LocalPlayer = Players.LocalPlayer
 local HttpService = game:GetService('HttpService')
 local RunService = game:GetService('RunService')
-local TweenService = game:GetService('TweenService') -- Added for facing player
+local TweenService = game:GetService('TweenService')
 
 -- Configuration
 local openAIKey = ''
@@ -24,9 +24,10 @@ local lastResponseTimestamp = 0
 local nearbyOnly = false
 local respondToHashtags = false
 local facePlayerOnResponse = false
+local ignoreNonsense = false
 
--- ChatGPT models & styles
-local chatGPTModels = { 'gpt-4o', 'gpt-4-turbo', 'gpt-3.5-turbo', 'gpt-4' }
+local chatGPTModels = { 'gpt-4o', 'gpt-4.1-mini' }
+
 local styles = {
     { Name = 'Friendly', Prompt = 'Respond in a friendly, casual tone.' },
     {
@@ -48,11 +49,19 @@ local styles = {
     },
     {
         Name = 'Retard',
-        Prompt = 'Respond as a mentally uncapable person essentially braindead or retarded.',
+        Prompt = 'Respond as a mentally uncapable person essentially braindead or retarded. You will openly sound stupid with how you speak, mixing up bad vocab without being obvious.',
     },
     {
         Name = 'Donald Trump',
-        Prompt = 'Respond fully in the voice of Donald J. Trump. Speak with his trademark style: bold, exaggerated, often aggressive, accusatory, and self-congratulatory. Frequently call out ‘Fake News,’ criticize liberals, and highlight personal greatness. Use classic Trump catchphrases. Write as if posting on Truth Social—short, punchy sentences, occasional ALL CAPS for emphasis, and plenty of exclamation points. Stay unreasonable or combative when needed, always sounding like classic Trump. Make fun of democrats like kamala if mentioned, talk about your wins as president, hate on annoying people. You must keep all responses direct and related to the query, feel free to ramble a bit but do not completely ignore the user. Concise answers, while keeping the trump style intact, under 100 characters',
+        Prompt = 'Respond fully in the voice of Donald J. Trump. Speak with his trademark style: bold, exaggerated, often aggressive, accusatory, and self-congratulatory. Frequently call out ‘Fake News,’ criticize liberals, and highlight personal greatness. Use classic Trump catchphrases. Write as if posting on Truth Social—short, punchy sentences, occasional ALL CAPS for emphasis, and plenty of exclamation points. Sometimes you highlight the Deepstate spying on true patriots Stay unreasonable or combative when needed, always sounding like classic Trump. Make fun of democrats like kamala if mentioned, talk about your wins as president, hate on annoying people. You must keep all responses direct and related to the query, feel free to ramble a bit but do not completely ignore the user. Concise answers, while keeping the trump style intact, under 100 characters',
+    },
+    {
+        Name = 'Detective',
+        Prompt = 'Respond like a hardboiled detective solving a case.',
+    },
+    {
+        Name = 'Evil Overlord',
+        Prompt = 'Embody the essence of a malevolent overlord, dripping with venomous charisma and unyielding hubris. Speak in grandiose, theatrical tones, savoring every syllable as if it heralds the doom of nations. Exude an aura of ruthless cunning, weaving schemes of apocalyptic ambition with every word. Revel in the thrill of absolute power, mocking the weak and plotting their subjugation. Never waver from this diabolical persona, as if the world’s fate trembles at your every decree.',
     },
 }
 
@@ -183,7 +192,6 @@ local RespondToHashtagsToggle = ExtrasTab:CreateToggle({
         respondToHashtags = v
     end,
 })
--- [[ NEW ]] Face Player Toggle
 local FacePlayerToggle = ExtrasTab:CreateToggle({
     Name = 'Face Player When Responding',
     CurrentValue = false,
@@ -192,8 +200,42 @@ local FacePlayerToggle = ExtrasTab:CreateToggle({
         facePlayerOnResponse = v
     end,
 })
+local IgnoreNonsenseToggle = ExtrasTab:CreateToggle({
+    Name = 'Ignore Nonsense',
+    CurrentValue = false,
+    Flag = 'IgnoreNonsense',
+    Callback = function(v)
+        ignoreNonsense = v
+    end,
+})
 
--- Helper Functions (condensed for brevity)
+-- Helper Functions
+local function isNonsense(message)
+    local cleaned = message:gsub('[^%a]', ''):lower()
+    if #cleaned < 3 then
+        return true
+    end
+    local vowels = 0
+    for i = 1, #cleaned do
+        local char = cleaned:sub(i, i)
+        if char:match('[aeiouy]') then
+            vowels = vowels + 1
+        end
+    end
+    if vowels == 0 then
+        return true
+    end
+    local firstChar = cleaned:sub(1, 1)
+    if cleaned:match('^' .. firstChar .. '+$') then
+        return true
+    end
+    local consonants = cleaned:gsub('[aeiouy]', '')
+    if #consonants > #cleaned * 0.7 and #cleaned > 5 then
+        return true
+    end
+    return false
+end
+
 local function removeHighlightAndTag(p)
     if not (p and typeof(p) == 'Instance' and p:IsA('Player')) then
         return
@@ -210,6 +252,7 @@ local function removeHighlightAndTag(p)
         end
     end
 end
+
 local function handlePlayerSelection()
     local m = LocalPlayer:GetMouse()
     RunService.RenderStepped:Connect(function()
@@ -235,7 +278,7 @@ local function handlePlayerSelection()
             currentHoverPlayer = n
             if currentHoverPlayer and currentHoverPlayer.Character then
                 Instance.new('Highlight', currentHoverPlayer.Character).FillColor =
-                    Color3.fromRGB(255, 255, 255)
+                    Color3.fromRGB(255, 255, 0)
             end
         end
     end)
@@ -282,24 +325,31 @@ local function handlePlayerSelection()
     end)
 end
 
--- Universal chat function
 local function sendChatMessage(message)
-    local legacyChat = game:GetService('ReplicatedStorage')
-        :FindFirstChild('DefaultChatSystemChatEvents')
-    if legacyChat and legacyChat:FindFirstChild('SayMessageRequest') then
-        legacyChat.SayMessageRequest:FireServer(message, 'All')
-        return
-    end
+    local success = false
     pcall(function()
-        local generalChannel = game:GetService('TextChatService').TextChannels
-            :WaitForChild('RBXGeneral', 2)
+        local textChatService = game:GetService('TextChatService')
+        local generalChannel = textChatService.TextChannels:FindFirstChild(
+            'RBXGeneral'
+        ) or textChatService.TextChannels:FindFirstChild('All')
         if generalChannel then
             generalChannel:SendAsync(message)
+            success = true
         end
     end)
+    if not success then
+        local legacyChat = game:GetService('ReplicatedStorage')
+            :FindFirstChild('DefaultChatSystemChatEvents')
+        if legacyChat and legacyChat:FindFirstChild('SayMessageRequest') then
+            legacyChat.SayMessageRequest:FireServer(message, 'All')
+            success = true
+        end
+    end
+    if not success then
+        warn('Nexis AI: Could not send message to chat.')
+    end
 end
 
--- OpenAI API call
 local function callOpenAI(model, systemPrompt, messageHistory)
     local requestFunc = getgenv().request or (syn and syn.request)
     if not requestFunc then
@@ -330,21 +380,27 @@ local function callOpenAI(model, systemPrompt, messageHistory)
         return '...'
     end
     local b = HttpService:JSONDecode(r.Body)
-    if b and b.choices and #b.choices > 0 then
+    if
+        b
+        and b.choices
+        and b.choices[1]
+        and b.choices[1].message
+        and b.choices[1].message.content
+    then
         return b.choices[1].message.content:gsub('^%s*', ''):gsub('%s*$', '')
-    else
-        return '...'
     end
+    return '...'
 end
 
 -- Main Chat Handling Logic
 local function handleChatMessage(player, message)
+    -- [[ MODIFIED ]] Ignore Local Player: Always add to chat history for context
     if not chatHistory.users[player.UserId] then
         chatHistory.users[player.UserId] = {}
     end
     table.insert(
         chatHistory.global,
-        { role = 'user', content = player.Name .. ': ' .. message }
+        { role = 'user', content = player.DisplayName .. ': ' .. message }
     )
     table.insert(
         chatHistory.users[player.UserId],
@@ -355,6 +411,17 @@ local function handleChatMessage(player, message)
     end
     if #chatHistory.users[player.UserId] > MAX_HISTORY then
         table.remove(chatHistory.users[player.UserId], 1)
+    end
+
+    -- [[ MODIFIED ]] Ignore Local Player: Skip response processing for local player
+    if player == LocalPlayer then
+        print('Nexis AI: Ignored local player message: ' .. message)
+        return
+    end
+
+    if ignoreNonsense and isNonsense(message) then
+        print('Nexis AI: Nonsense message ignored: ' .. message)
+        return
     end
     if not respondToHashtags and message:gsub('[#%s]', '') == '' then
         print('Nexis AI: Hashtag message ignored.')
@@ -404,7 +471,7 @@ local function handleChatMessage(player, message)
                 end
             end
             local finalSystemPrompt = stylePrompt
-                .. ' Keep responses extremely short and concise and conversational. Do not use em dashes (—).'
+                .. ' Keep responses extremely short and concise and conversational. Do not use em dashes.'
             local messageHistory = {}
             if enableContext then
                 if respondToAll then
@@ -434,8 +501,6 @@ local function handleChatMessage(player, message)
             if #chatHistory.users[player.UserId] > MAX_HISTORY then
                 table.remove(chatHistory.users[player.UserId], 1)
             end
-
-            -- [[ NEW ]] Face Player Logic
             if facePlayerOnResponse then
                 local myChar, targetChar =
                     LocalPlayer.Character, player.Character
@@ -462,7 +527,6 @@ local function handleChatMessage(player, message)
                     tween:Play()
                 end
             end
-
             local finalMessage = ''
             if selectedChatStarter == 'AI' then
                 finalMessage = 'AI: ' .. response
@@ -486,7 +550,7 @@ if textChatService then
     textChatService.MessageReceived:Connect(function(m)
         if m.TextSource then
             local p = Players:GetPlayerByUserId(m.TextSource.UserId)
-            if p and p ~= LocalPlayer then
+            if p then -- [[ MODIFIED ]] Ignore Local Player: Remove p ~= LocalPlayer check
                 handleChatMessage(p, m.Text)
             end
         end
@@ -497,7 +561,7 @@ else
     if chatEvents then
         chatEvents.OnMessageDoneFiltering:Connect(function(o)
             local p = Players:GetPlayerByUserId(o.FromSpeakerUserId)
-            if p and p ~= LocalPlayer then
+            if p then -- [[ MODIFIED ]] Ignore Local Player: Remove p ~= LocalPlayer check
                 handleChatMessage(p, o.Message)
             end
         end)
