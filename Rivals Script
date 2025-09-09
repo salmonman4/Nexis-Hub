@@ -1,0 +1,1050 @@
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+local TweenService = game:GetService('TweenService')
+local UserInputService = game:GetService('UserInputService')
+local Players = game:GetService('Players')
+local RunService = game:GetService('RunService')
+local ReplicatedStorage = game:GetService('ReplicatedStorage')
+local Camera = workspace.CurrentCamera
+for _, v in ipairs(workspace:GetDescendants()) do
+    if v:IsA('Folder') and v.Name == 'Barriers' then
+        for _, part in ipairs(v:GetDescendants()) do
+            if part:IsA('BasePart') then
+                part.CanTouch = false
+            end
+        end
+    end
+end
+local FeatureListGui = Instance.new('ScreenGui')
+FeatureListGui.Name = 'FeatureListGui'
+FeatureListGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+FeatureListGui.ResetOnSpawn = false
+FeatureListGui.Parent = game:GetService('CoreGui')
+local FeatureContainer = Instance.new('Frame')
+FeatureContainer.Name = 'FeatureContainer'
+FeatureContainer.BackgroundTransparency = 1
+FeatureContainer.Size = UDim2.new(0, 200, 0, 300)
+FeatureContainer.Position = UDim2.new(0, 10, 1, -10)
+FeatureContainer.AnchorPoint = Vector2.new(0, 1)
+FeatureContainer.Parent = FeatureListGui
+local ListLayout = Instance.new('UIListLayout')
+ListLayout.Parent = FeatureContainer
+ListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+ListLayout.Padding = UDim.new(0, 5)
+local LabelTemplate = Instance.new('TextLabel')
+LabelTemplate.Font = Enum.Font.GothamBold
+LabelTemplate.TextSize = 16
+LabelTemplate.TextColor3 = Color3.fromRGB(0, 255, 0)
+LabelTemplate.BackgroundTransparency = 1
+LabelTemplate.Size = UDim2.new(1, 0, 0, 20)
+LabelTemplate.TextXAlignment = Enum.TextXAlignment.Left
+local Stroke = Instance.new('UIStroke')
+Stroke.Thickness = 2
+Stroke.Color = Color3.fromRGB(0, 0, 0)
+Stroke.Parent = LabelTemplate
+local activeFeatures = {}
+local function updateFeatureListDisplay()
+    for _, v in pairs(FeatureContainer:GetChildren()) do
+        if v:IsA('TextLabel') then
+            v:Destroy()
+        end
+    end
+    for _, featureName in ipairs(activeFeatures) do
+        local newLabel = LabelTemplate:Clone()
+        newLabel.Text = featureName .. ' Enabled'
+        newLabel.Parent = FeatureContainer
+    end
+end
+local function setFeatureState(name, isEnabled)
+    local index = table.find(activeFeatures, name)
+    if isEnabled and not index then
+        table.insert(activeFeatures, name)
+    elseif not isEnabled and index then
+        table.remove(activeFeatures, index)
+    end
+    updateFeatureListDisplay()
+end
+local CameraController =
+    require(Players.LocalPlayer.PlayerScripts.Controllers.CameraController)
+local FighterController =
+    require(Players.LocalPlayer.PlayerScripts.Controllers.FighterController)
+local Utility = require(ReplicatedStorage.Modules.Utility)
+local AIMBOT_CONFIG = {
+    FOV = 120,
+    CENTER_SCREEN_PERCENTAGE = 0.25,
+    SMOOTHNESS = 0.05,
+    AIMBOT_TYPE = 'Standard',
+    ENABLED = false,
+    MAX_DISTANCE = 1000,
+    AIM_PART = 'Head',
+}
+local TRIGGERBOT_CONFIG = {
+    ENABLED = false,
+    MAX_DISTANCE = 500,
+    DELAY = 0.1,
+}
+local lastTriggerTime = 0
+local triggerbotConnection = nil
+local LocalPlayer = Players.LocalPlayer
+local isAiming = false
+local aimbotConnection
+local followBehindEnabled = false
+local currentTargetPlayer = nil
+local followConnection = nil
+local FOLLOW_MAX_DISTANCE = 500
+local followKeybind = Enum.KeyCode.R
+local infiniteJumpEnabled = false
+local fovCircleEnabled = false
+local fovCircle = nil
+local flySpeed = 50
+local flyEnabled = false
+local flyKeybindEnabled = false
+local flyMethod = 'Fly on Toggle'
+local flyKeybind = Enum.KeyCode.G
+local bodyVelocity, bodyGyro
+local walkSpeed = 16
+local walkSpeedEnabled = false
+local defaultWalkSpeed = 16
+local walkSpeedConnection
+local isSettingSpeed = false
+local noclipEnabled = false
+local noclipConnection = nil
+local espEnabled = false
+local espElements = {}
+local espScreenGui = Instance.new('ScreenGui')
+espScreenGui.Name = 'EspScreenGui_' .. tostring(math.random(1, 1e6))
+espScreenGui.ResetOnSpawn = false
+local espOption = 'Health bar and box'
+setclipboard('https://direct-link.net/1339614/rUUCKbJkbPdP')
+Rayfield:Notify({
+    Title = 'Key Required',
+    Content = 'Get your key from https://direct-link.net/1339614/rUUCKbJkbPdP (copied to clipboard)',
+    Duration = 6.5,
+    Image = 4483362458,
+    Actions = { Accept = { Name = 'Okay', Callback = function() end } },
+})
+local keyList = game:HttpGet(
+    'https://raw.githubusercontent.com/salmonman4/keys/refs/heads/main/rivals'
+)
+local selectedKey = keyList:match('%S+')
+local Window = Rayfield:CreateWindow({
+    Name = 'Rivals - Nexis Hub',
+    LoadingTitle = 'Rivals Script',
+    LoadingSubtitle = 'by Nexis Hub',
+    ConfigurationSaving = {
+        Enabled = true,
+        FolderName = 'RivalsConfig',
+        FileName = 'RivalsSettings',
+    },
+    Discord = { Enabled = false, Invite = '', RememberJoins = true },
+    KeySystem = true,
+    KeySettings = {
+        Title = 'Rivals Key System',
+        Subtitle = 'Enter Key, Link Copied to Clipboard',
+        Note = 'https://direct-link.net/1339614/rUUCKbJkbPdP',
+        FileName = 'RivalsKey',
+        SaveKey = true,
+        GrabKeyFromSite = false,
+        Key = selectedKey,
+    },
+})
+local CombatTab = Window:CreateTab('Combat', 4483362458)
+local ESPTab = Window:CreateTab('ESP', 4483362458)
+local MobilityTab = Window:CreateTab('Mobility', 4483362458)
+local UtilitiesTab = Window:CreateTab('Utilities', 4483362458)
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoidRootPart = character:WaitForChild('HumanoidRootPart')
+local function findBestTarget()
+    local bestTarget = nil
+    local bestDistanceFromCenter = math.huge
+    local screenSize = Camera.ViewportSize
+    local center = Vector2.new(screenSize.X / 2, screenSize.Y / 2)
+    local localRootPart = character
+        and character:FindFirstChild('HumanoidRootPart')
+    for _, targetPlayer in pairs(Players:GetPlayers()) do
+        if targetPlayer ~= LocalPlayer and targetPlayer.Character then
+            local fighter = FighterController:GetFighter(targetPlayer)
+            if
+                fighter
+                and fighter.Entity
+                and fighter.Entity.Model
+                and not fighter.Entity.Model:FindFirstChild('TeammateLabel')
+            then
+                local targetModel = fighter.Entity.Model
+                local humanoid = targetModel:FindFirstChildOfClass('Humanoid')
+                local targetPart =
+                    targetModel:FindFirstChild(AIMBOT_CONFIG.AIM_PART)
+                local targetRootPart =
+                    targetModel:FindFirstChild('HumanoidRootPart')
+                if
+                    humanoid
+                    and humanoid.Health > 0
+                    and targetPart
+                    and targetRootPart
+                    and localRootPart
+                then
+                    local distance = (
+                        localRootPart.Position - targetRootPart.Position
+                    ).Magnitude
+                    if distance > AIMBOT_CONFIG.MAX_DISTANCE then
+                        continue
+                    end
+                    local screenPosition, visible =
+                        Camera:WorldToScreenPoint(targetPart.Position)
+                    if visible then
+                        local targetPos =
+                            Vector2.new(screenPosition.X, screenPosition.Y)
+                        local distanceFromCenter = (targetPos - center).Magnitude
+                        if AIMBOT_CONFIG.AIMBOT_TYPE == 'Standard' then
+                            local centerWidth = screenSize.X
+                                * AIMBOT_CONFIG.CENTER_SCREEN_PERCENTAGE
+                            local centerHeight = screenSize.Y
+                                * AIMBOT_CONFIG.CENTER_SCREEN_PERCENTAGE
+                            local minX = center.X - centerWidth / 2
+                            local maxX = center.X + centerWidth / 2
+                            local minY = center.Y - centerHeight / 2
+                            local maxY = center.Y + centerHeight / 2
+                            if
+                                not (
+                                    targetPos.X >= minX
+                                    and targetPos.X <= maxX
+                                    and targetPos.Y >= minY
+                                    and targetPos.Y <= maxY
+                                )
+                            then
+                                continue
+                            end
+                        end
+                        local fovRadius = (screenSize.X / 2)
+                            * (AIMBOT_CONFIG.FOV / Camera.FieldOfView)
+                        if
+                            distanceFromCenter <= fovRadius
+                            and distanceFromCenter < bestDistanceFromCenter
+                        then
+                            bestTarget = targetPart
+                            bestDistanceFromCenter = distanceFromCenter
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return bestTarget
+end
+local function aimAtTarget(targetPart, deltaTime)
+    if not targetPart then
+        return
+    end
+    local cameraPos = Camera.CFrame.Position
+    local targetPos = targetPart.Position
+    local targetCFrame = CFrame.new(cameraPos, targetPos)
+    local smoothFactor = math.clamp(AIMBOT_CONFIG.SMOOTHNESS, 0, 1)
+    local lerpFactor = 1 - smoothFactor
+    local smoothedCFrame = Camera.CFrame:Lerp(targetCFrame, lerpFactor)
+    CameraController.Rotation = Vector2.new(smoothedCFrame:ToEulerAnglesYXZ())
+    local encoded = Utility:EncodeCameraRotation(CameraController.Rotation)
+    ReplicatedStorage.Remotes.Replication.Fighter.UpdateCameraRotation:FireServer(
+        encoded,
+        nil
+    )
+end
+local function startAimbot()
+    if aimbotConnection then
+        aimbotConnection:Disconnect()
+    end
+    aimbotConnection = RunService.Heartbeat:Connect(function(deltaTime)
+        if isAiming and AIMBOT_CONFIG.ENABLED then
+            local bestTarget = findBestTarget()
+            if bestTarget then
+                aimAtTarget(bestTarget, deltaTime)
+            end
+        end
+    end)
+end
+local function getTriggerbotTarget()
+    local localCharacter = LocalPlayer.Character
+    if not localCharacter then
+        return nil
+    end
+    local viewportSize = Camera.ViewportSize
+    local center = Vector2.new(viewportSize.X / 2, viewportSize.Y / 2)
+    local unitRay = Camera:ViewportPointToRay(center.X, center.Y)
+    local raycastParams = RaycastParams.new()
+    raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+    raycastParams.FilterDescendantsInstances = { localCharacter }
+    local result = workspace:Raycast(
+        unitRay.Origin,
+        unitRay.Direction * TRIGGERBOT_CONFIG.MAX_DISTANCE,
+        raycastParams
+    )
+    if result and result.Instance then
+        local targetModel = result.Instance:FindFirstAncestorOfClass('Model')
+        if targetModel then
+            local targetPlayer = Players:GetPlayerFromCharacter(targetModel)
+            if targetPlayer and targetPlayer ~= LocalPlayer then
+                local humanoid = targetModel:FindFirstChildOfClass('Humanoid')
+                if humanoid and humanoid.Health > 0 then
+                    return targetPlayer
+                end
+            end
+        end
+    end
+    return nil
+end
+local function simulateCenteredClick()
+    if not mousemoveabs then
+        return
+    end
+    local originalPosition = UserInputService:GetMouseLocation()
+    local viewportSize = Camera.ViewportSize
+    local centerPosition = Vector2.new(viewportSize.X / 2, viewportSize.Y / 2)
+    mousemoveabs(centerPosition.X, centerPosition.Y)
+    task.wait()
+    mouse1press()
+    task.wait(0.03)
+    mouse1release()
+    task.wait()
+    mousemoveabs(originalPosition.X, originalPosition.Y)
+end
+local function runTriggerbot()
+    if not TRIGGERBOT_CONFIG.ENABLED then
+        return
+    end
+    if tick() - lastTriggerTime >= TRIGGERBOT_CONFIG.DELAY then
+        local target = getTriggerbotTarget()
+        if target then
+            simulateCenteredClick()
+            lastTriggerTime = tick()
+        end
+    end
+end
+local function stopTriggerbot()
+    if triggerbotConnection then
+        triggerbotConnection:Disconnect()
+        triggerbotConnection = nil
+    end
+end
+local function startTriggerbot()
+    stopTriggerbot()
+    lastTriggerTime = 0
+    triggerbotConnection = RunService.Heartbeat:Connect(runTriggerbot)
+end
+local function stopFollow()
+    if followConnection then
+        followConnection:Disconnect()
+        followConnection = nil
+    end
+    currentTargetPlayer = nil
+end
+local function switchFollowTarget()
+    local potentialTargets = {}
+    local localChar = LocalPlayer.Character
+    local localHRP = localChar and localChar:FindFirstChild('HumanoidRootPart')
+    if not localHRP then
+        currentTargetPlayer = nil
+        return
+    end
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and p.Character then
+            local fighter = FighterController:GetFighter(p)
+            if
+                fighter
+                and fighter.Entity
+                and fighter.Entity.Model
+                and not fighter.Entity.Model:FindFirstChild('TeammateLabel')
+            then
+                local targetHRP = p.Character:FindFirstChild('HumanoidRootPart')
+                if targetHRP then
+                    local distance = (localHRP.Position - targetHRP.Position).Magnitude
+                    if distance <= FOLLOW_MAX_DISTANCE then
+                        table.insert(potentialTargets, p)
+                    end
+                end
+            end
+        end
+    end
+    if #potentialTargets == 0 then
+        currentTargetPlayer = nil
+        return
+    end
+    local validTargets = {}
+    if currentTargetPlayer and #potentialTargets > 1 then
+        for _, p in pairs(potentialTargets) do
+            if p ~= currentTargetPlayer then
+                table.insert(validTargets, p)
+            end
+        end
+    else
+        validTargets = potentialTargets
+    end
+    if #validTargets > 0 then
+        currentTargetPlayer = validTargets[math.random(1, #validTargets)]
+    elseif #potentialTargets > 0 then
+        currentTargetPlayer =
+            potentialTargets[math.random(1, #potentialTargets)]
+    else
+        currentTargetPlayer = nil
+    end
+end
+local function onFollowHeartbeat()
+    if not followBehindEnabled then
+        stopFollow()
+        return
+    end
+    local localChar = LocalPlayer.Character
+    if not localChar or not localChar:FindFirstChild('HumanoidRootPart') then
+        return
+    end
+    local localHRP = localChar.HumanoidRootPart
+    if
+        not currentTargetPlayer
+        or not currentTargetPlayer.Character
+        or not currentTargetPlayer.Character:FindFirstChild('HumanoidRootPart')
+    then
+        switchFollowTarget()
+        if not currentTargetPlayer then
+            return
+        end
+    end
+    local targetChar = currentTargetPlayer.Character
+    local targetHRP = targetChar:FindFirstChild('HumanoidRootPart')
+    local targetHead = targetChar:FindFirstChild('Head')
+    if not targetHRP or not targetHead then
+        switchFollowTarget()
+        return
+    end
+    local distance = (localHRP.Position - targetHRP.Position).Magnitude
+    if distance > FOLLOW_MAX_DISTANCE then
+        switchFollowTarget()
+        return
+    end
+    local offset = targetHRP.CFrame.LookVector * 10
+    local desiredPosition = targetHRP.Position - offset
+    local desiredCFrame = CFrame.new(desiredPosition, targetHRP.Position)
+    localHRP.CFrame = desiredCFrame
+    local cameraPos = Camera.CFrame.Position
+    local targetPos = targetHead.Position
+    local targetCameraCFrame = CFrame.new(cameraPos, targetPos)
+    CameraController.Rotation =
+        Vector2.new(targetCameraCFrame:ToEulerAnglesYXZ())
+    local encoded = Utility:EncodeCameraRotation(CameraController.Rotation)
+    ReplicatedStorage.Remotes.Replication.Fighter.UpdateCameraRotation:FireServer(
+        encoded,
+        nil
+    )
+end
+local function startFollow()
+    switchFollowTarget()
+    if not currentTargetPlayer then
+        Rayfield:Notify({
+            Title = 'Follow Behind Enemy',
+            Content = 'No enemies found within '
+                .. FOLLOW_MAX_DISTANCE
+                .. ' studs.',
+            Duration = 3,
+        })
+        return false
+    end
+    if followConnection then
+        followConnection:Disconnect()
+    end
+    followConnection = RunService.Heartbeat:Connect(onFollowHeartbeat)
+    return true
+end
+local function stopFly()
+    flyKeybindEnabled = false
+    if character and humanoidRootPart then
+        if bodyVelocity and bodyVelocity.Parent then
+            bodyVelocity:Destroy()
+        end
+        if bodyGyro and bodyGyro.Parent then
+            bodyGyro:Destroy()
+        end
+        bodyVelocity = nil
+        bodyGyro = nil
+    end
+end
+local function updateFly()
+    if not flyEnabled or not character or not humanoidRootPart then
+        stopFly()
+        return
+    end
+    if flyKeybindEnabled then
+        if not bodyVelocity or not bodyVelocity.Parent then
+            bodyVelocity = Instance.new('BodyVelocity', humanoidRootPart)
+            bodyVelocity.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+        end
+        if not bodyGyro or not bodyGyro.Parent then
+            bodyGyro = Instance.new('BodyGyro', humanoidRootPart)
+            bodyGyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+            bodyGyro.P = 10000
+            bodyGyro.D = 100
+        end
+        local direction = Vector3.new()
+        if UserInputService:IsKeyDown(Enum.KeyCode.W) then
+            direction += Camera.CFrame.LookVector
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.S) then
+            direction -= Camera.CFrame.LookVector
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.D) then
+            direction += Camera.CFrame.RightVector
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.A) then
+            direction -= Camera.CFrame.RightVector
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+            direction += Vector3.new(0, 1, 0)
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
+            direction -= Vector3.new(0, 1, 0)
+        end
+        direction = direction.Magnitude > 0 and direction.Unit * flySpeed
+            or Vector3.zero
+        TweenService
+            :Create(bodyVelocity, TweenInfo.new(0.1), { Velocity = direction })
+            :Play()
+        bodyGyro.CFrame = Camera.CFrame
+    else
+        stopFly()
+    end
+end
+local function toggleNoclip(state)
+    noclipEnabled = state
+    if state then
+        if noclipConnection then
+            noclipConnection:Disconnect()
+        end
+        noclipConnection = RunService.Stepped:Connect(function()
+            if character then
+                for _, part in pairs(character:GetDescendants()) do
+                    if part:IsA('BasePart') then
+                        part.CanCollide = false
+                    end
+                end
+            end
+        end)
+    else
+        if noclipConnection then
+            noclipConnection:Disconnect()
+            noclipConnection = nil
+        end
+        if character then
+            for _, part in pairs(character:GetDescendants()) do
+                if part:IsA('BasePart') then
+                    part.CanCollide = true
+                end
+            end
+        end
+    end
+end
+local function startWalkSpeedHook(humanoid)
+    if walkSpeedConnection then
+        walkSpeedConnection:Disconnect()
+    end
+    walkSpeedConnection = humanoid
+        :GetPropertyChangedSignal('WalkSpeed')
+        :Connect(function()
+            if
+                not isSettingSpeed
+                and walkSpeedEnabled
+                and humanoid.WalkSpeed ~= walkSpeed
+            then
+                isSettingSpeed = true
+                humanoid.WalkSpeed = walkSpeed
+                isSettingSpeed = false
+            end
+        end)
+end
+local function stopWalkSpeedHook()
+    if walkSpeedConnection then
+        walkSpeedConnection:Disconnect()
+        walkSpeedConnection = nil
+    end
+    local humanoid = character and character:FindFirstChild('Humanoid')
+    if humanoid and humanoid.WalkSpeed ~= defaultWalkSpeed then
+        isSettingSpeed = true
+        humanoid.WalkSpeed = defaultWalkSpeed
+        isSettingSpeed = false
+    end
+end
+local function createEspElements(targetPlayer)
+    local espFrame = Instance.new('Frame', espScreenGui)
+    espFrame.BackgroundTransparency = 1
+    espFrame.BorderSizePixel = 0
+    local stroke = Instance.new('UIStroke', espFrame)
+    stroke.Thickness = 3
+    stroke.Color = Color3.new(0, 0, 0)
+    stroke.LineJoinMode = Enum.LineJoinMode.Miter
+    local healthBar = Instance.new('Frame', espScreenGui)
+    healthBar.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    healthBar.BorderSizePixel = 0
+    local healthStroke = Instance.new('UIStroke', healthBar)
+    healthStroke.Thickness = 1
+    healthStroke.Color = Color3.new(0, 0, 0)
+    local healthFill = Instance.new('Frame', healthBar)
+    healthFill.BorderSizePixel = 0
+    local nameLabel = Instance.new('TextLabel', espScreenGui)
+    nameLabel.Text = targetPlayer.DisplayName
+    nameLabel.Font = Enum.Font.GothamBold
+    nameLabel.TextSize = 16
+    nameLabel.TextColor3 = Color3.new(1, 1, 1)
+    nameLabel.BackgroundTransparency = 1
+    local nameStroke = Instance.new('UIStroke', nameLabel)
+    nameStroke.Color = Color3.new(0, 0, 0)
+    nameStroke.Thickness = 2.5
+    espElements[targetPlayer] = {
+        espFrame = espFrame,
+        healthBar = healthBar,
+        healthFill = healthFill,
+        nameLabel = nameLabel,
+    }
+end
+local function updateAllEsp()
+    if not espEnabled and not fovCircleEnabled then
+        if espScreenGui.Parent then
+            espScreenGui:ClearAllChildren()
+            espScreenGui.Parent = nil
+            espElements = {}
+            if fovCircle then
+                fovCircle:Destroy()
+                fovCircle = nil
+            end
+        end
+        return
+    end
+    if not espScreenGui.Parent then
+        espScreenGui.Parent = game.CoreGui
+    end
+    if fovCircleEnabled then
+        if not fovCircle then
+            fovCircle = Instance.new('Frame', espScreenGui)
+            fovCircle.Name = 'FovCircle'
+            fovCircle.BackgroundTransparency = 0.7
+            fovCircle.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+            fovCircle.BorderSizePixel = 0
+            local uiCorner = Instance.new('UICorner', fovCircle)
+            uiCorner.CornerRadius = UDim.new(1, 0)
+            local uiStroke = Instance.new('UIStroke', fovCircle)
+            uiStroke.Thickness = 2
+            uiStroke.Color = Color3.fromRGB(0, 0, 0)
+        end
+        local screenSize = Camera.ViewportSize
+        local fovRadius = (screenSize.X / 2)
+            * (AIMBOT_CONFIG.FOV / Camera.FieldOfView)
+        fovCircle.Size = UDim2.new(0, fovRadius * 2, 0, fovRadius * 2)
+        fovCircle.Position = UDim2.new(0.5, -fovRadius, 0.5, -fovRadius)
+        fovCircle.Visible = true
+    elseif fovCircle then
+        fovCircle:Destroy()
+        fovCircle = nil
+    end
+    local localRootPart = character
+        and character:FindFirstChild('HumanoidRootPart')
+    local playersToUpdate = {}
+    for _, p in ipairs(Players:GetPlayers()) do
+        if
+            p ~= player
+            and p.Character
+            and p.Character:FindFirstChild('HumanoidRootPart')
+            and p.Character.Humanoid.Health > 0
+        then
+            local fighter = FighterController:GetFighter(p)
+            if
+                fighter
+                and fighter.Entity
+                and fighter.Entity.Model
+                and not fighter.Entity.Model:FindFirstChild('TeammateLabel')
+            then
+                local targetRootPart =
+                    p.Character:FindFirstChild('HumanoidRootPart')
+                if localRootPart and targetRootPart then
+                    local distance = (
+                        localRootPart.Position - targetRootPart.Position
+                    ).Magnitude
+                    if distance <= AIMBOT_CONFIG.MAX_DISTANCE then
+                        playersToUpdate[p] = true
+                        if not espElements[p] then
+                            createEspElements(p)
+                        end
+                    end
+                end
+            end
+        end
+    end
+    for p, data in pairs(espElements) do
+        if playersToUpdate[p] then
+            local char = p.Character
+            local rootPart = char.HumanoidRootPart
+            local head = char:FindFirstChild('Head')
+            local extents = char:GetExtentsSize()
+            local worldHead = rootPart.Position
+                + Vector3.new(0, extents.Y / 2, 0)
+            local worldFeet = rootPart.Position
+                - Vector3.new(0, extents.Y / 2, 0)
+            local screenHead, onScreenHead =
+                Camera:WorldToScreenPoint(worldHead)
+            local screenFeet, onScreenFeet =
+                Camera:WorldToScreenPoint(worldFeet)
+            local centerPos, onScreenCenter =
+                Camera:WorldToScreenPoint(rootPart.Position)
+            if onScreenCenter and head then
+                local height = math.abs(screenHead.Y - screenFeet.Y)
+                local width = height / 2
+                local boxX = centerPos.X - (width / 2)
+                local boxY = screenHead.Y
+                data.espFrame.Visible = espEnabled
+                    and (
+                        espOption == 'Health bar and box'
+                        or espOption == 'Just box'
+                    )
+                data.healthBar.Visible = espEnabled
+                    and (
+                        espOption == 'Health bar and box'
+                        or espOption == 'Just health bar'
+                    )
+                data.nameLabel.Visible = espEnabled
+                    and (
+                        espOption == 'Health bar and box'
+                        or espOption == 'Just health bar'
+                    )
+                data.espFrame.Size = UDim2.fromOffset(width, height)
+                data.espFrame.Position = UDim2.fromOffset(boxX, boxY)
+                data.healthBar.Size = UDim2.fromOffset(6, height)
+                data.healthBar.Position = UDim2.fromOffset(boxX - 6 - 4, boxY)
+                local percent = math.clamp(
+                    char.Humanoid.Health / char.Humanoid.MaxHealth,
+                    0,
+                    1
+                )
+                local tweenInfo = TweenInfo.new(0.2, Enum.EasingStyle.Quad)
+                local goal = {
+                    Size = UDim2.new(1, 0, percent, 0),
+                    Position = UDim2.new(0, 0, 1 - percent, 0),
+                }
+                TweenService:Create(data.healthFill, tweenInfo, goal):Play()
+                data.healthFill.BackgroundColor3 =
+                    Color3.fromHSV(0.33 * percent, 1, 1)
+                data.nameLabel.Position = UDim2.fromOffset(
+                    centerPos.X - (data.nameLabel.AbsoluteSize.X / 2),
+                    boxY - 20
+                )
+            else
+                data.espFrame.Visible = false
+                data.healthBar.Visible = false
+                data.nameLabel.Visible = false
+            end
+        else
+            for _, element in pairs(data) do
+                element:Destroy()
+            end
+            espElements[p] = nil
+        end
+    end
+end
+RunService.Heartbeat:Connect(function()
+    updateFly()
+    updateAllEsp()
+end)
+player.CharacterAdded:Connect(function(newCharacter)
+    newCharacter:WaitForChild('HumanoidRootPart')
+    local humanoid = newCharacter:WaitForChild('Humanoid')
+    character = newCharacter
+    humanoidRootPart = newCharacter:FindFirstChild('HumanoidRootPart')
+    if walkSpeedEnabled then
+        isSettingSpeed = true
+        humanoid.WalkSpeed = walkSpeed
+        isSettingSpeed = false
+        startWalkSpeedHook(humanoid)
+    end
+    if flyEnabled and flyMethod == 'Fly on Toggle' then
+        flyKeybindEnabled = true
+    end
+    if noclipEnabled then
+        toggleNoclip(true)
+    end
+    if followBehindEnabled then
+        startFollow()
+    end
+end)
+if character and character:FindFirstChild('Humanoid') then
+    local humanoid = character:FindFirstChild('Humanoid')
+    if humanoid then
+        defaultWalkSpeed = humanoid.WalkSpeed
+    end
+end
+CombatTab:CreateToggle({
+    Name = 'Aimbot',
+    CurrentValue = false,
+    Flag = 'AimbotToggle',
+    Callback = function(v)
+        AIMBOT_CONFIG.ENABLED = v
+        isAiming = v
+        if v then
+            startAimbot()
+        elseif aimbotConnection then
+            aimbotConnection:Disconnect()
+            aimbotConnection = nil
+        end
+        setFeatureState('Aimbot', v)
+    end,
+})
+CombatTab:CreateToggle({
+    Name = 'Auto-Fire',
+    CurrentValue = false,
+    Flag = 'TriggerbotToggle',
+    Callback = function(v)
+        TRIGGERBOT_CONFIG.ENABLED = v
+        if v then
+            startTriggerbot()
+        else
+            stopTriggerbot()
+        end
+        setFeatureState('Auto-Fire', v)
+    end,
+})
+CombatTab:CreateDropdown({
+    Name = 'Aim Mode',
+    Options = { 'Standard', 'Full Lock' },
+    CurrentOption = 'Standard',
+    Flag = 'AimbotType',
+    Callback = function(v)
+        AIMBOT_CONFIG.AIMBOT_TYPE = v[1]
+    end,
+})
+CombatTab:CreateDropdown({
+    Name = 'Aim Part',
+    Options = {
+        'Head',
+        'Torso',
+        'Left Arm',
+        'Right Arm',
+        'Left Leg',
+        'Right Leg',
+    },
+    CurrentOption = 'Head',
+    Flag = 'AimbotPart',
+    Callback = function(v)
+        AIMBOT_CONFIG.AIM_PART = v[1]
+    end,
+})
+CombatTab:CreateSlider({
+    Name = 'Aim Smoothness',
+    Range = { 0, 1 },
+    Increment = 0.01,
+    Suffix = 'Smoothness',
+    CurrentValue = 0.05,
+    Flag = 'AimbotSmoothness',
+    Callback = function(v)
+        AIMBOT_CONFIG.SMOOTHNESS = v
+    end,
+})
+ESPTab:CreateToggle({
+    Name = 'Player ESP',
+    CurrentValue = false,
+    Flag = 'PlayerEsp',
+    Callback = function(v)
+        espEnabled = v
+        setFeatureState('Player ESP', v)
+    end,
+})
+ESPTab:CreateToggle({
+    Name = 'FOV Circle',
+    CurrentValue = false,
+    Flag = 'FovCircleToggle',
+    Callback = function(v)
+        fovCircleEnabled = v
+        setFeatureState('FOV Circle', v)
+    end,
+})
+ESPTab:CreateSlider({
+    Name = 'FOV Size',
+    Range = { 10, 25 },
+    Increment = 1,
+    Suffix = 'Degrees',
+    CurrentValue = 15,
+    Flag = 'FovSize',
+    Callback = function(v)
+        AIMBOT_CONFIG.FOV = v
+    end,
+})
+ESPTab:CreateDropdown({
+    Name = 'ESP Options',
+    Options = { 'Health bar and box', 'Just box', 'Just health bar' },
+    CurrentOption = 'Health bar and box',
+    Flag = 'EspOptions',
+    Callback = function(v)
+        espOption = v[1]
+    end,
+})
+MobilityTab:CreateToggle({
+    Name = 'Speed Hack',
+    CurrentValue = false,
+    Flag = 'WalkSpeedToggle',
+    Callback = function(v)
+        walkSpeedEnabled = v
+        local humanoid = character and character:FindFirstChild('Humanoid')
+        if not humanoid then
+            return
+        end
+        if v then
+            isSettingSpeed = true
+            humanoid.WalkSpeed = walkSpeed
+            isSettingSpeed = false
+            startWalkSpeedHook(humanoid)
+        else
+            stopWalkSpeedHook()
+        end
+        setFeatureState('Speed Hack', v)
+    end,
+})
+MobilityTab:CreateSlider({
+    Name = 'Speed Value',
+    Range = { 16, 100 },
+    Increment = 1,
+    Suffix = 'Speed',
+    CurrentValue = 16,
+    Flag = 'WalkSpeed',
+    Callback = function(v)
+        walkSpeed = v
+        if
+            walkSpeedEnabled
+            and character
+            and character:FindFirstChild('Humanoid')
+        then
+            isSettingSpeed = true
+            character.Humanoid.WalkSpeed = v
+            isSettingSpeed = false
+        end
+    end,
+})
+MobilityTab:CreateToggle({
+    Name = 'Flight',
+    CurrentValue = false,
+    Flag = 'FlyToggle',
+    Callback = function(v)
+        flyEnabled = v
+        if not v then
+            flyKeybindEnabled = false
+            stopFly()
+        elseif flyMethod == 'Fly on Toggle' then
+            flyKeybindEnabled = true
+        end
+        setFeatureState('Flight', v)
+    end,
+})
+MobilityTab:CreateDropdown({
+    Name = 'Flight Mode',
+    Options = { 'Fly on Toggle', 'Toggle Fly on Keybind' },
+    CurrentOption = 'Fly on Toggle',
+    Flag = 'FlyMethod',
+    Callback = function(v)
+        flyMethod = v[1]
+        if not flyEnabled then
+            stopFly()
+        elseif flyMethod == 'Fly on Toggle' then
+            flyKeybindEnabled = true
+        else
+            flyKeybindEnabled = false
+            stopFly()
+        end
+    end,
+})
+MobilityTab:CreateInput({
+    Name = 'Flight Keybind',
+    PlaceholderText = 'Enter key (e.g., G)',
+    CurrentValue = 'G',
+    Flag = 'FlyKeybind',
+    Callback = function(v)
+        local key = Enum.KeyCode[v:upper()]
+        if key then
+            flyKeybind = key
+        end
+    end,
+})
+MobilityTab:CreateToggle({
+    Name = 'Multi-Jump',
+    CurrentValue = false,
+    Flag = 'InfiniteJumpToggle',
+    Callback = function(v)
+        infiniteJumpEnabled = v
+        setFeatureState('Multi-Jump', v)
+    end,
+})
+MobilityTab:CreateToggle({
+    Name = 'Noclip',
+    CurrentValue = false,
+    Flag = 'NoclipToggle',
+    Callback = function(v)
+        toggleNoclip(v)
+        setFeatureState('Noclip', v)
+    end,
+})
+UtilitiesTab:CreateToggle({
+    Name = 'Follow Behind Enemy',
+    CurrentValue = false,
+    Flag = 'FollowEnemyToggle',
+    Callback = function(v)
+        followBehindEnabled = v
+        if v then
+            startFollow()
+        else
+            if followConnection then
+                followConnection:Disconnect()
+                followConnection = nil
+            end
+            currentTargetPlayer = nil
+        end
+        setFeatureState('Follow Behind Enemy', v)
+    end,
+})
+UtilitiesTab:CreateInput({
+    Name = 'Switch Target Key',
+    PlaceholderText = 'Enter key (e.g., R)',
+    CurrentValue = 'R',
+    Flag = 'FollowKeybind',
+    Callback = function(v)
+        local key = Enum.KeyCode[v:upper()]
+        if key then
+            followKeybind = key
+        end
+    end,
+})
+UserInputService.InputBegan:Connect(function(input, gp)
+    if gp then
+        return
+    end
+    if input.KeyCode == Enum.KeyCode.RightControl then
+        if TRIGGERBOT_CONFIG.ENABLED then
+            TRIGGERBOT_CONFIG.ENABLED = false
+            stopTriggerbot()
+            Window:SetFlag('TriggerbotToggle', false)
+            setFeatureState('Auto-Fire', false)
+            Rayfield:Notify({
+                Title = 'Panic Key',
+                Content = 'Auto-Fire has been disabled.',
+                Duration = 3,
+                Image = 4483362458,
+            })
+        end
+    end
+    if
+        input.KeyCode == flyKeybind
+        and flyEnabled
+        and flyMethod == 'Toggle Fly on Keybind'
+    then
+        flyKeybindEnabled = not flyKeybindEnabled
+    end
+    if followBehindEnabled and input.KeyCode == followKeybind then
+        switchFollowTarget()
+    end
+    if
+        infiniteJumpEnabled
+        and input.UserInputType == Enum.UserInputType.Keyboard
+        and input.KeyCode == Enum.KeyCode.Space
+    then
+        if character and character:FindFirstChildOfClass('Humanoid') then
+            character.Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+        end
+    end
+end)
