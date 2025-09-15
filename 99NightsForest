@@ -1,0 +1,729 @@
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local LocalPlayer = Players.LocalPlayer
+local FlyLibrary = loadstring(game:HttpGet("https://raw.githubusercontent.com/salmonman4/RobloxUniversalExploits/refs/heads/main/SmoothFlyLibrary"))()
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Debris = game:GetService("Debris")
+
+local Window = Rayfield:CreateWindow({
+    Name = "🔦 99 Nights in the Forest - BasedGooner",
+    LoadingTitle = "99 Nights Interface",
+    LoadingSubtitle = "by BasedGooner",
+    ConfigurationSaving = {
+        Enabled = true,
+        FolderName = "NightsInTheForest",
+        FileName = "Config"
+    },
+    Discord = {
+        Enabled = false,
+        Invite = "",
+        RememberJoins = true
+    },
+    KeySystem = false
+})
+
+local CharacterTab = Window:CreateTab("Character", "person-standing")
+local AutomationTab = Window:CreateTab("Automation", "repeat-2")
+local TeleportTab = Window:CreateTab("Teleport", "map-pin")
+local MobilitySection = CharacterTab:CreateSection("Mobility")
+local HealthSection = CharacterTab:CreateSection("Health")
+local ResourcesSection = AutomationTab:CreateSection("Resources")
+
+local WalkspeedToggle = {
+    Enabled = false,
+    Value = 16,
+    Connection = nil,
+    OriginalValue = 16
+}
+
+local InfiniteJumpToggle = {
+    Enabled = false,
+    Connection = nil
+}
+
+local NoclipToggle = {
+    Enabled = false,
+    Connection = nil
+}
+
+local FlyToggle = {
+    Enabled = false,
+    Controller = nil
+}
+
+local AutoChopToggle = {
+    Enabled = false,
+    Connection = nil,
+    Mode = 1
+}
+
+local AutoBurnToggle = {
+    Enabled = false,
+    Connection = nil
+}
+
+local AutoScrapToggle = {
+    Enabled = false,
+    Connection = nil
+}
+
+local AutoScrapAllToggle = {
+    Enabled = false,
+    Connection = nil
+}
+
+local AutoRestoreHungerToggle = {
+    Enabled = false,
+    Connection = nil
+}
+
+local function setWalkspeed(speed)
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
+        LocalPlayer.Character.Humanoid.WalkSpeed = speed
+    end
+end
+
+local function toggleInfiniteJump(enabled)
+    if enabled then
+        if not InfiniteJumpToggle.Connection then
+            InfiniteJumpToggle.Connection = UserInputService.JumpRequest:Connect(function()
+                if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
+                    LocalPlayer.Character.Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+                end
+            end)
+        end
+    elseif InfiniteJumpToggle.Connection then
+        InfiniteJumpToggle.Connection:Disconnect()
+        InfiniteJumpToggle.Connection = nil
+    end
+end
+
+local function toggleNoclip(enabled)
+    if enabled then
+        if not NoclipToggle.Connection then
+            NoclipToggle.Connection = RunService.Stepped:Connect(function()
+                if LocalPlayer.Character then
+                    for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
+                        if part:IsA("BasePart") then
+                            part.CanCollide = false
+                        end
+                    end
+                end
+            end)
+        end
+    elseif NoclipToggle.Connection then
+        NoclipToggle.Connection:Disconnect()
+        NoclipToggle.Connection = nil
+    end
+end
+
+local function monitorWalkspeed()
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
+        local humanoid = LocalPlayer.Character.Humanoid
+        if WalkspeedToggle.Connection then
+            WalkspeedToggle.Connection:Disconnect()
+        end
+        WalkspeedToggle.Connection = humanoid:GetPropertyChangedSignal("WalkSpeed"):Connect(function()
+            if WalkspeedToggle.Enabled and humanoid.WalkSpeed ~= WalkspeedToggle.Value then
+                humanoid.WalkSpeed = WalkspeedToggle.Value
+            end
+        end)
+    end
+end
+
+local function setupFlyController()
+    if not FlyToggle.Controller and LocalPlayer.Character then
+        FlyToggle.Controller = FlyLibrary.new(LocalPlayer.Character, { Mode = 2 })
+    end
+end
+
+local function toggleFly(enabled)
+    if FlyToggle.Controller then
+        if enabled then
+            FlyToggle.Controller:Enable()
+        else
+            FlyToggle.Controller:Disable()
+        end
+    end
+end
+
+local Client = require(Players.LocalPlayer.PlayerScripts.Client)
+local InventoryHandler = Client.InventoryHandler
+local ToolDamageObject = ReplicatedStorage.RemoteEvents.ToolDamageObject
+local RequestStartDraggingItem = ReplicatedStorage.RemoteEvents.RequestStartDraggingItem
+local RequestConsumeItem = ReplicatedStorage.RemoteEvents.RequestConsumeItem
+
+local function equipAxe()
+    local inventory = LocalPlayer:WaitForChild("Inventory")
+    local OldAxe = nil
+    for _, item in ipairs(inventory:GetChildren()) do
+        if item:IsA("Model") and item.Name:find("Axe") then
+            OldAxe = item
+            break
+        end
+    end
+    if not OldAxe then
+        return false
+    end
+    InventoryHandler.RequestEquipItem(OldAxe)
+    return InventoryHandler.GetCurrentlyEquipped() ~= nil
+end
+
+local function unequipAxe()
+    if InventoryHandler.GetCurrentlyEquipped() then
+        InventoryHandler.UnequipCurrentItem()
+    end
+    return true
+end
+
+local function findNearestTree()
+    local landmarks = workspace.Map:FindFirstChild("Landmarks")
+    local foliage = workspace.Map:FindFirstChild("Foliage")
+    local locations = {landmarks, foliage}
+    if not landmarks and not foliage then
+        return nil, nil
+    end
+
+    local closestTree, closestTrunk
+    local minDistance = math.huge
+    for _, location in ipairs(locations) do
+        if location then
+            for _, model in ipairs(location:GetChildren()) do
+                if model:IsA("Model") and model:GetAttribute("Resource") == "Tree" and not model:GetAttribute("Destroyed") then
+                    local toolTier = model:GetAttribute("ToolTier")
+                    if toolTier ~= 3 then
+                        local trunk = model:FindFirstChild("Trunk")
+                        if trunk and trunk:IsA("BasePart") then
+                            local dist = (LocalPlayer.Character.HumanoidRootPart.Position - trunk.Position).Magnitude
+                            if dist < minDistance then
+                                minDistance = dist
+                                closestTree = model
+                                closestTrunk = trunk
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return closestTree, closestTrunk
+end
+
+local function orbitTree(tree, trunk, dt)
+    if not tree or not trunk or not trunk.Parent or tree:GetAttribute("Destroyed") then return end
+    local trunkPos = trunk.Position
+    local orbitAngle = (tick() * 2.0) % (2 * math.pi)
+
+    local orbitRadius = 5 -- adjust closer/further
+    local xOffset = orbitRadius * math.cos(orbitAngle)
+    local zOffset = orbitRadius * math.sin(orbitAngle)
+
+    local newPos = trunkPos + Vector3.new(xOffset, 0, zOffset)
+    if AutoChopToggle.Mode == 3 then
+        newPos = newPos + Vector3.new(0, 15, 0)
+    end
+
+    LocalPlayer.Character:PivotTo(CFrame.new(newPos, Vector3.new(trunkPos.X, newPos.Y, trunkPos.Z)))
+end
+
+local function playSwingAndChop(trunk)
+    local swing = Instance.new("Sound")
+    swing.Name = "Swing"
+    swing.SoundId = "rbxassetid://135032262103740"
+    swing.Volume = 0.14
+    swing.Looped = false
+    swing.PlaybackSpeed = 1
+    swing.Parent = trunk
+    swing:Play()
+    Debris:AddItem(swing, swing.TimeLength + 0.5)
+
+    task.delay(0.1, function()
+        local chop = Instance.new("Sound")
+        chop.Name = "ChopSound"
+        chop.SoundId = "rbxassetid://94194236278191"
+        chop.Volume = 1
+        chop.Looped = false
+        chop.PlaybackSpeed = 1
+        chop.Parent = trunk
+        chop:Play()
+        Debris:AddItem(chop, chop.TimeLength + 0.5)
+    end)
+end
+
+local function chopTree()
+    if not InventoryHandler.GetCurrentlyEquipped() or not AutoChopToggle.CurrentTree or not AutoChopToggle.CurrentTrunk or AutoChopToggle.CurrentTree:GetAttribute("Destroyed") then
+        return
+    end
+
+    local currentTime = tick()
+    if currentTime - (AutoChopToggle.LastChop or 0) < 0.5 then return end
+    AutoChopToggle.LastChop = currentTime
+
+    local hitCounter = (AutoChopToggle.HitCounter or 0) + 1
+    AutoChopToggle.HitCounter = hitCounter
+    local hitId = tostring(hitCounter) .. "_" .. LocalPlayer.UserId
+    local cframe = CFrame.new(LocalPlayer.Character.HumanoidRootPart.Position, AutoChopToggle.CurrentTrunk.Position) * CFrame.new(0, 0, -1)
+
+    ToolDamageObject:InvokeServer(AutoChopToggle.CurrentTree, InventoryHandler.GetCurrentlyEquipped(), hitId, cframe)
+    playSwingAndChop(AutoChopToggle.CurrentTrunk)
+end
+
+local function universalLoop()
+    RunService.Heartbeat:Connect(function()
+        if WalkspeedToggle.Enabled and LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
+            LocalPlayer.Character.Humanoid.WalkSpeed = WalkspeedToggle.Value
+            if not WalkspeedToggle.Connection then
+                monitorWalkspeed()
+            end
+        elseif WalkspeedToggle.Connection then
+            WalkspeedToggle.Connection:Disconnect()
+            WalkspeedToggle.Connection = nil
+            setWalkspeed(WalkspeedToggle.OriginalValue)
+        end
+
+        if InfiniteJumpToggle.Enabled then
+            toggleInfiniteJump(true)
+        else
+            toggleInfiniteJump(false)
+        end
+
+        if NoclipToggle.Enabled then
+            toggleNoclip(true)
+        else
+            toggleNoclip(false)
+        end
+
+        if FlyToggle.Enabled and not FlyToggle.Controller then
+            setupFlyController()
+        end
+        if FlyToggle.Enabled then
+            toggleFly(true)
+        else
+            toggleFly(false)
+        end
+
+        if AutoChopToggle.Enabled then
+            if not AutoChopToggle.Connection then
+                if equipAxe() then
+                    AutoChopToggle.Connection = RunService.Heartbeat:Connect(function(dt)
+                        local currentTime = tick()
+                        if currentTime - (AutoChopToggle.LastUpdate or 0) > 1 then
+                            local tree, trunk = findNearestTree()
+                            if tree and trunk and (not AutoChopToggle.CurrentTree or tree ~= AutoChopToggle.CurrentTree or tree:GetAttribute("Destroyed")) then
+                                AutoChopToggle.CurrentTree, AutoChopToggle.CurrentTrunk = tree, trunk
+                            elseif tree and tree:GetAttribute("Destroyed") then
+                                AutoChopToggle.CurrentTree, AutoChopToggle.CurrentTrunk = nil, nil
+                            end
+                            AutoChopToggle.LastUpdate = currentTime
+                        end
+
+                        if AutoChopToggle.CurrentTree and AutoChopToggle.CurrentTrunk and not AutoChopToggle.CurrentTree:GetAttribute("Destroyed") then
+                            if AutoChopToggle.Mode == 1 or AutoChopToggle.Mode == 3 then
+                                orbitTree(AutoChopToggle.CurrentTree, AutoChopToggle.CurrentTrunk, dt)
+                            end
+
+                            if currentTime - (AutoChopToggle.LastChop or 0) >= 0.5 then
+                                chopTree()
+                            end
+                        end
+                    end)
+                end
+            end
+        elseif AutoChopToggle.Connection then
+            unequipAxe()
+            AutoChopToggle.Connection:Disconnect()
+            AutoChopToggle.Connection = nil
+            AutoChopToggle.CurrentTree, AutoChopToggle.CurrentTrunk = nil, nil
+            AutoChopToggle.LastUpdate, AutoChopToggle.LastChop = nil, nil
+            AutoChopToggle.HitCounter = nil
+
+            local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                hrp.Velocity = Vector3.zero
+                hrp.AssemblyLinearVelocity = Vector3.zero
+                hrp.AssemblyAngularVelocity = Vector3.zero
+                task.delay(0.1, function()
+                    if hrp then
+                        hrp.Velocity = Vector3.zero
+                        hrp.AssemblyLinearVelocity = Vector3.zero
+                        hrp.AssemblyAngularVelocity = Vector3.zero
+                    end
+                end)
+                task.delay(0.2, function()
+                    if hrp then
+                        hrp.Velocity = Vector3.zero
+                        hrp.AssemblyLinearVelocity = Vector3.zero
+                        hrp.AssemblyAngularVelocity = Vector3.zero
+                    end
+                end)
+            end
+        end
+
+        if AutoBurnToggle.Enabled then
+    if not AutoBurnToggle.Connection then
+        AutoBurnToggle.Connection = RunService.Heartbeat:Connect(function()
+            local now = tick()
+            if now - (AutoBurnToggle.LastUpdate or 0) < 0.5 then
+                return
+            end
+            AutoBurnToggle.LastUpdate = now
+
+            local targetPosition = workspace.Map.Campground.MainFire.InnerTouchZone.Position
+            for _, log in pairs(workspace.Items:GetChildren()) do
+                if log.Name == "Log" and log:FindFirstChild("Main") then
+                    local main = log.Main
+                    local dragAttach = main:FindFirstChild("DraggingAttachment")
+
+                    RequestStartDraggingItem:FireServer(log)
+
+                    if dragAttach then
+                        if not main:FindFirstChild("AutoBurnAlign") then
+                            for _, part in ipairs(main:GetDescendants()) do
+                                if part:IsA("BasePart") then
+                                    part.CanCollide = false
+                                end
+                            end
+
+                            local alignPos = Instance.new("AlignPosition")
+                            alignPos.Name = "AutoBurnAlign"
+                            alignPos.Attachment0 = dragAttach
+                            alignPos.Mode = Enum.PositionAlignmentMode.OneAttachment
+                            alignPos.Position = targetPosition + Vector3.new(0,25,0)
+                            alignPos.MaxForce = math.huge
+                            alignPos.Responsiveness = 20000
+                            alignPos.RigidityEnabled = true
+                            alignPos.ApplyAtCenterOfMass = true
+                            alignPos.Parent = main
+
+                            local alignOri = Instance.new("AlignOrientation")
+                            alignOri.Name = "AutoBurnOrientation"
+                            alignOri.Attachment0 = dragAttach
+                            alignOri.Mode = Enum.OrientationAlignmentMode.OneAttachment
+                            alignOri.MaxTorque = math.huge
+                            alignOri.Responsiveness = 5000
+                            alignOri.RigidityEnabled = true
+                            alignOri.Parent = main
+
+                            task.spawn(function()
+                                while log.Parent and AutoBurnToggle.Enabled do
+                                    if (main.Position - targetPosition).Magnitude <= 26 then
+                                        alignPos.Position = targetPosition
+                                        break
+                                    end
+                                    task.wait(0.1)
+                                end
+                            end)
+                        end
+                    end
+                end
+            end
+        end)
+    end
+elseif AutoBurnToggle.Connection then
+    AutoBurnToggle.Connection:Disconnect()
+    AutoBurnToggle.Connection = nil
+    for _, log in pairs(workspace.Items:GetChildren()) do
+        if log.Name == "Log" and log:FindFirstChild("Main") then
+            local main = log.Main
+            for _, c in ipairs(main:GetChildren()) do
+                if c:IsA("AlignPosition") or c:IsA("AlignOrientation") then
+                    c:Destroy()
+                end
+            end
+        end
+    end
+end
+
+
+        if AutoScrapToggle.Enabled then
+            if not AutoScrapToggle.Connection then
+                AutoScrapToggle.Connection = RunService.Heartbeat:Connect(function()
+                    local targetPosition = workspace.Map.Campground.CraftingBench.TouchZone.Position
+                    for _, log in pairs(workspace.Items:GetChildren()) do
+                        if log.Name == "Log" and log:FindFirstChild("Main") then
+                            local main = log.Main
+                            local dragAttach = main:FindFirstChild("DraggingAttachment")
+                            RequestStartDraggingItem:FireServer(log)
+                            if dragAttach and dragAttach:IsA("Attachment") then
+                                for _, c in ipairs(main:GetChildren()) do
+                                    if c:IsA("AlignPosition") or c:IsA("AngularVelocity") then
+                                        c:Destroy()
+                                    end
+                                end
+                                for _, part in ipairs(main:GetDescendants()) do
+                                    if part:IsA("BasePart") then
+                                        part.CanCollide = false
+                                    end
+                                end
+                                local alignPos = Instance.new("AlignPosition")
+                                alignPos.Attachment0 = dragAttach
+                                alignPos.Mode = Enum.PositionAlignmentMode.OneAttachment
+                                alignPos.Position = targetPosition + Vector3.new(0, 25, 0)
+                                alignPos.MaxForce = math.huge
+                                alignPos.Responsiveness = 20000
+                                alignPos.RigidityEnabled = true
+                                alignPos.ApplyAtCenterOfMass = true
+                                alignPos.Parent = main
+                                local angular = Instance.new("AngularVelocity")
+                                angular.Attachment0 = dragAttach
+                                angular.AngularVelocity = Vector3.new(0, 0, 0)
+                                angular.MaxTorque = math.huge
+                                angular.RelativeTo = Enum.ActuatorRelativeTo.World
+                                angular.ReactionTorqueEnabled = false
+                                angular.Parent = main
+                                task.spawn(function()
+                                    while log.Parent and AutoScrapToggle.Enabled do
+                                        local dist = (main.Position - targetPosition).Magnitude
+                                        if dist <= 26 then
+                                            alignPos.Position = targetPosition
+                                            break
+                                        end
+                                        task.wait(0.1)
+                                    end
+                                end)
+                            end
+                        end
+                    end
+                end)
+            end
+        elseif AutoScrapToggle.Connection then
+            AutoScrapToggle.Connection:Disconnect()
+            AutoScrapToggle.Connection = nil
+            for _, log in pairs(workspace.Items:GetChildren()) do
+                if log.Name == "Log" and log:FindFirstChild("Main") then
+                    local main = log.Main
+                    for _, c in ipairs(main:GetChildren()) do
+                        if c:IsA("AlignPosition") or c:IsA("AngularVelocity") then
+                            c:Destroy()
+                        end
+                    end
+                end
+            end
+        end
+
+        if AutoScrapAllToggle.Enabled then
+            if not AutoScrapAllToggle.Connection then
+                AutoScrapAllToggle.Connection = RunService.Heartbeat:Connect(function()
+                    local targetPosition = workspace.Map.Campground.CraftingBench.TouchZone.Position
+                    for _, item in pairs(workspace.Items:GetChildren()) do
+                        if item:IsA("Model") and item:GetAttribute("Scrappable") then
+                            local main = item:FindFirstChild("Main")
+                            local dragAttach = main and main:FindFirstChild("DraggingAttachment")
+                            if dragAttach and dragAttach:IsA("Attachment") then
+                                RequestStartDraggingItem:FireServer(item)
+                                for _, c in ipairs(main:GetChildren()) do
+                                    if c:IsA("AlignPosition") or c:IsA("AngularVelocity") then
+                                        c:Destroy()
+                                    end
+                                end
+                                for _, part in ipairs(main:GetDescendants()) do
+                                    if part:IsA("BasePart") then
+                                        part.CanCollide = false
+                                    end
+                                end
+                                local alignPos = Instance.new("AlignPosition")
+                                alignPos.Attachment0 = dragAttach
+                                alignPos.Mode = Enum.PositionAlignmentMode.OneAttachment
+                                alignPos.Position = targetPosition + Vector3.new(0, 25, 0)
+                                alignPos.MaxForce = math.huge
+                                alignPos.Responsiveness = 20000
+                                alignPos.RigidityEnabled = true
+                                alignPos.ApplyAtCenterOfMass = true
+                                alignPos.Parent = main
+                                local angular = Instance.new("AngularVelocity")
+                                angular.Attachment0 = dragAttach
+                                angular.AngularVelocity = Vector3.new(0, 0, 0)
+                                angular.MaxTorque = math.huge
+                                angular.RelativeTo = Enum.ActuatorRelativeTo.World
+                                angular.ReactionTorqueEnabled = false
+                                angular.Parent = main
+                                task.spawn(function()
+                                    while item.Parent and AutoScrapAllToggle.Enabled do
+                                        local dist = (main.Position - targetPosition).Magnitude
+                                        if dist <= 26 then
+                                            alignPos.Position = targetPosition
+                                            break
+                                        end
+                                        task.wait(0.1)
+                                    end
+                                end)
+                            end
+                        end
+                    end
+                end)
+            end
+        elseif AutoScrapAllToggle.Connection then
+            AutoScrapAllToggle.Connection:Disconnect()
+            AutoScrapAllToggle.Connection = nil
+            for _, item in pairs(workspace.Items:GetChildren()) do
+                if item:IsA("Model") and item:GetAttribute("Scrappable") then
+                    local main = item:FindFirstChild("Main")
+                    if main then
+                        for _, c in ipairs(main:GetChildren()) do
+                            if c:IsA("AlignPosition") or c:IsA("AngularVelocity") then
+                                c:Destroy()
+                            end
+                        end
+                    end
+                end
+            end
+        end
+
+        if AutoRestoreHungerToggle.Enabled then
+            if not AutoRestoreHungerToggle.Connection then
+                AutoRestoreHungerToggle.Connection = RunService.Heartbeat:Connect(function()
+                    local hunger = LocalPlayer:GetAttribute("Hunger") or 0
+                    if hunger < 150 and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                        for _, item in pairs(workspace.Items:GetChildren()) do
+                            if item:IsA("Model") and item:GetAttribute("RestoreHunger") then
+                                LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(item.Position + Vector3.new(0, 5, 0))
+                                RequestConsumeItem:InvokeServer(item.Name)
+                                task.wait(0.25)
+                                hunger = LocalPlayer:GetAttribute("Hunger") or 0
+                                if hunger > 190 then
+                                    break
+                                end
+                            end
+                        end
+                    end
+                end)
+            end
+        elseif AutoRestoreHungerToggle.Connection then
+            AutoRestoreHungerToggle.Connection:Disconnect()
+            AutoRestoreHungerToggle.Connection = nil
+        end
+    end)
+end
+
+CharacterTab:CreateToggle({
+    Name = "Walkspeed Changer",
+    CurrentValue = false,
+    Flag = "WalkspeedToggle",
+    Callback = function(value)
+        WalkspeedToggle.Enabled = value
+        if value and LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
+            local humanoid = LocalPlayer.Character.Humanoid
+            WalkspeedToggle.OriginalValue = humanoid.WalkSpeed
+            humanoid.WalkSpeed = WalkspeedToggle.Value
+            monitorWalkspeed()
+        elseif not value and LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
+            LocalPlayer.Character.Humanoid.WalkSpeed = WalkspeedToggle.OriginalValue
+        end
+    end
+})
+
+CharacterTab:CreateSlider({
+    Name = "Walkspeed Value",
+    Range = {16, 125},
+    Increment = 1,
+    Suffix = "Speed",
+    CurrentValue = 16,
+    Flag = "WalkspeedSlider",
+    Callback = function(value)
+        WalkspeedToggle.Value = value
+        if WalkspeedToggle.Enabled and LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
+            LocalPlayer.Character.Humanoid.WalkSpeed = value
+        end
+    end
+})
+
+CharacterTab:CreateToggle({
+    Name = "Infinite Jump",
+    CurrentValue = false,
+    Flag = "InfiniteJumpToggle",
+    Callback = function(value)
+        InfiniteJumpToggle.Enabled = value
+    end
+})
+
+CharacterTab:CreateToggle({
+    Name = "Noclip",
+    CurrentValue = false,
+    Flag = "NoclipToggle",
+    Callback = function(value)
+        NoclipToggle.Enabled = value
+    end
+})
+
+CharacterTab:CreateToggle({
+    Name = "Fly",
+    CurrentValue = false,
+    Flag = "FlyToggle",
+    Callback = function(value)
+        FlyToggle.Enabled = value
+    end
+})
+
+CharacterTab:CreateToggle({
+    Name = "Auto-Restore Hunger",
+    CurrentValue = false,
+    Flag = "AutoRestoreHungerToggle",
+    Callback = function(value)
+        AutoRestoreHungerToggle.Enabled = value
+    end
+})
+
+AutomationTab:CreateToggle({
+    Name = "Auto-Chop Trees",
+    CurrentValue = false,
+    Flag = "AutoChopToggle",
+    Callback = function(value)
+        AutoChopToggle.Enabled = value
+    end
+})
+
+AutomationTab:CreateDropdown({
+    Name = "Chop Mode",
+    Options = {"Regular", "High"},
+    CurrentOption = "Regular",
+    Flag = "ChopModeDropdown",
+    Callback = function(value)
+        local option = value[1]
+        if option == "Regular" then
+            AutoChopToggle.Mode = 1
+        else
+            AutoChopToggle.Mode = 3
+        end
+    end
+})
+
+AutomationTab:CreateToggle({
+    Name = "Auto-Burn Wood",
+    CurrentValue = false,
+    Flag = "AutoBurnToggle",
+    Callback = function(value)
+        AutoBurnToggle.Enabled = value
+    end
+})
+
+AutomationTab:CreateToggle({
+    Name = "Auto-Scrap Wood",
+    CurrentValue = false,
+    Flag = "AutoScrapToggle",
+    Callback = function(value)
+        AutoScrapToggle.Enabled = value
+    end
+})
+
+AutomationTab:CreateToggle({
+    Name = "Auto-Scrap All",
+    CurrentValue = false,
+    Flag = "AutoScrapAllToggle",
+    Callback = function(value)
+        AutoScrapAllToggle.Enabled = value
+    end
+})
+
+TeleportTab:CreateButton({
+    Name = "Campsite",
+    Callback = function()
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            LocalPlayer.Character.HumanoidRootPart.CFrame = workspace.Map.Campground.MainFire.InnerTouchZone.CFrame
+        end
+    end
+})
+
+task.spawn(universalLoop)
+Rayfield:LoadConfiguration()
