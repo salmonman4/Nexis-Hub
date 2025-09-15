@@ -1,4 +1,6 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+if not Rayfield then error("Failed to load Rayfield library") end
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -27,9 +29,8 @@ local Window = Rayfield:CreateWindow({
 local CharacterTab = Window:CreateTab("Character", "person-standing")
 local AutomationTab = Window:CreateTab("Automation", "repeat-2")
 local TeleportTab = Window:CreateTab("Teleport", "map-pin")
-local MobilitySection = CharacterTab:CreateSection("Mobility")
-local HealthSection = CharacterTab:CreateSection("Health")
-local ResourcesSection = AutomationTab:CreateSection("Resources")
+CharacterTab:CreateSection("Mobility")
+AutomationTab:CreateSection("Resources")
 
 local WalkspeedToggle = {
     Enabled = false,
@@ -61,7 +62,8 @@ local AutoChopToggle = {
 
 local AutoBurnToggle = {
     Enabled = false,
-    Connection = nil
+    Connection = nil,
+    LastUpdate = 0
 }
 
 local AutoScrapToggle = {
@@ -362,80 +364,79 @@ local function universalLoop()
         end
 
         if AutoBurnToggle.Enabled then
-    if not AutoBurnToggle.Connection then
-        AutoBurnToggle.Connection = RunService.Heartbeat:Connect(function()
-            local now = tick()
-            if now - (AutoBurnToggle.LastUpdate or 0) < 0.5 then
-                return
-            end
-            AutoBurnToggle.LastUpdate = now
+            if not AutoBurnToggle.Connection then
+                AutoBurnToggle.Connection = RunService.Heartbeat:Connect(function()
+                    local now = tick()
+                    if now - (AutoBurnToggle.LastUpdate or 0) < 0.5 then
+                        return
+                    end
+                    AutoBurnToggle.LastUpdate = now
 
-            local targetPosition = workspace.Map.Campground.MainFire.InnerTouchZone.Position
+                    local targetPosition = workspace.Map.Campground.MainFire.InnerTouchZone.Position
+                    for _, log in pairs(workspace.Items:GetChildren()) do
+                        if log.Name == "Log" and log:FindFirstChild("Main") then
+                            local main = log.Main
+                            local dragAttach = main:FindFirstChild("DraggingAttachment")
+
+                            RequestStartDraggingItem:FireServer(log)
+
+                            if dragAttach then
+                                if not main:FindFirstChild("AutoBurnAlign") then
+                                    for _, part in ipairs(main:GetDescendants()) do
+                                        if part:IsA("BasePart") then
+                                            part.CanCollide = false
+                                        end
+                                    end
+
+                                    local alignPos = Instance.new("AlignPosition")
+                                    alignPos.Name = "AutoBurnAlign"
+                                    alignPos.Attachment0 = dragAttach
+                                    alignPos.Mode = Enum.PositionAlignmentMode.OneAttachment
+                                    alignPos.Position = targetPosition + Vector3.new(0,25,0)
+                                    alignPos.MaxForce = math.huge
+                                    alignPos.Responsiveness = 20000
+                                    alignPos.RigidityEnabled = true
+                                    alignPos.ApplyAtCenterOfMass = true
+                                    alignPos.Parent = main
+
+                                    local alignOri = Instance.new("AlignOrientation")
+                                    alignOri.Name = "AutoBurnOrientation"
+                                    alignOri.Attachment0 = dragAttach
+                                    alignOri.Mode = Enum.OrientationAlignmentMode.OneAttachment
+                                    alignOri.MaxTorque = math.huge
+                                    alignOri.Responsiveness = 5000
+                                    alignOri.RigidityEnabled = true
+                                    alignOri.Parent = main
+
+                                    task.spawn(function()
+                                        while log.Parent and AutoBurnToggle.Enabled do
+                                            if (main.Position - targetPosition).Magnitude <= 26 then
+                                                alignPos.Position = targetPosition
+                                                break
+                                            end
+                                            task.wait(0.1)
+                                        end
+                                    end)
+                                end
+                            end
+                        end
+                    end
+                end)
+            end
+        elseif AutoBurnToggle.Connection then
+            AutoBurnToggle.Connection:Disconnect()
+            AutoBurnToggle.Connection = nil
             for _, log in pairs(workspace.Items:GetChildren()) do
                 if log.Name == "Log" and log:FindFirstChild("Main") then
                     local main = log.Main
-                    local dragAttach = main:FindFirstChild("DraggingAttachment")
-
-                    RequestStartDraggingItem:FireServer(log)
-
-                    if dragAttach then
-                        if not main:FindFirstChild("AutoBurnAlign") then
-                            for _, part in ipairs(main:GetDescendants()) do
-                                if part:IsA("BasePart") then
-                                    part.CanCollide = false
-                                end
-                            end
-
-                            local alignPos = Instance.new("AlignPosition")
-                            alignPos.Name = "AutoBurnAlign"
-                            alignPos.Attachment0 = dragAttach
-                            alignPos.Mode = Enum.PositionAlignmentMode.OneAttachment
-                            alignPos.Position = targetPosition + Vector3.new(0,25,0)
-                            alignPos.MaxForce = math.huge
-                            alignPos.Responsiveness = 20000
-                            alignPos.RigidityEnabled = true
-                            alignPos.ApplyAtCenterOfMass = true
-                            alignPos.Parent = main
-
-                            local alignOri = Instance.new("AlignOrientation")
-                            alignOri.Name = "AutoBurnOrientation"
-                            alignOri.Attachment0 = dragAttach
-                            alignOri.Mode = Enum.OrientationAlignmentMode.OneAttachment
-                            alignOri.MaxTorque = math.huge
-                            alignOri.Responsiveness = 5000
-                            alignOri.RigidityEnabled = true
-                            alignOri.Parent = main
-
-                            task.spawn(function()
-                                while log.Parent and AutoBurnToggle.Enabled do
-                                    if (main.Position - targetPosition).Magnitude <= 26 then
-                                        alignPos.Position = targetPosition
-                                        break
-                                    end
-                                    task.wait(0.1)
-                                end
-                            end)
+                    for _, c in ipairs(main:GetChildren()) do
+                        if c:IsA("AlignPosition") or c:IsA("AlignOrientation") then
+                            c:Destroy()
                         end
                     end
                 end
             end
-        end)
-    end
-elseif AutoBurnToggle.Connection then
-    AutoBurnToggle.Connection:Disconnect()
-    AutoBurnToggle.Connection = nil
-    for _, log in pairs(workspace.Items:GetChildren()) do
-        if log.Name == "Log" and log:FindFirstChild("Main") then
-            local main = log.Main
-            for _, c in ipairs(main:GetChildren()) do
-                if c:IsA("AlignPosition") or c:IsA("AlignOrientation") then
-                    c:Destroy()
-                end
-            end
         end
-    end
-end
-
 
         if AutoScrapToggle.Enabled then
             if not AutoScrapToggle.Connection then
@@ -575,14 +576,14 @@ end
             if not AutoRestoreHungerToggle.Connection then
                 AutoRestoreHungerToggle.Connection = RunService.Heartbeat:Connect(function()
                     local hunger = LocalPlayer:GetAttribute("Hunger") or 0
-                    if hunger < 150 and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                    if hunger < 125 and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
                         for _, item in pairs(workspace.Items:GetChildren()) do
                             if item:IsA("Model") and item:GetAttribute("RestoreHunger") then
-                                LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(item.Position + Vector3.new(0, 5, 0))
-                                RequestConsumeItem:InvokeServer(item.Name)
-                                task.wait(0.25)
+                                LocalPlayer.Character.HumanoidRootPart.CFrame = item:GetPivot()
+                                RequestConsumeItem:InvokeServer(item)
+                                task.wait()
                                 hunger = LocalPlayer:GetAttribute("Hunger") or 0
-                                if hunger > 190 then
+                                if hunger > 190 or not AutoRestoreHungerToggle.Enabled then
                                     break
                                 end
                             end
@@ -655,6 +656,8 @@ CharacterTab:CreateToggle({
         FlyToggle.Enabled = value
     end
 })
+
+CharacterTab:CreateSection("Health")
 
 CharacterTab:CreateToggle({
     Name = "Auto-Restore Hunger",
