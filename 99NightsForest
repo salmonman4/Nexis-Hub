@@ -494,7 +494,7 @@ end)
                     local alignPos = Instance.new("AlignPosition")
                     alignPos.Attachment0 = dragAttach
                     alignPos.Mode = Enum.PositionAlignmentMode.OneAttachment
-                    alignPos.Position = workspace.ScrapBench.Main.Position + Vector3.new(0, 3, 0)
+                    alignPos.Position = workspace.Map.Campground.CraftingBench.TouchZone.Position + Vector3.new(0, 3, 0)
                     alignPos.MaxForce = math.huge
                     alignPos.Responsiveness = 20000
                     alignPos.RigidityEnabled = true
