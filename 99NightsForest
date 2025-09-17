@@ -435,14 +435,24 @@ local function universalLoop()
                                     alignOri.Parent = main
 
                                     task.spawn(function()
-                                        while log.Parent and AutoBurnToggle.Enabled do
-                                            if (main.Position - targetPosition).Magnitude <= 26 then
-                                                alignPos.Position = targetPosition
-                                                break
-                                            end
-                                            task.wait(0.1)
-                                        end
-                                    end)
+    local lifted = false
+    while log.Parent and AutoBurnToggle.Enabled do
+        if not lifted then
+            -- phase 1: lift above fire
+            alignPos.Position = targetPosition + Vector3.new(0, 50, 0)
+            if (main.Position - targetPosition).Magnitude <= 55 then
+                lifted = true
+            end
+        else
+            -- phase 2: lower into fire
+            alignPos.Position = targetPosition + Vector3.new(0, 3, 0)
+        end
+        task.wait(0.1)
+    end
+end)
+
+
+
                                 end
                             end
                         end
@@ -465,75 +475,95 @@ local function universalLoop()
         end
 
         if AutoScrapToggle.Enabled then
-            if not AutoScrapToggle.Connection then
-                AutoScrapToggle.Connection = RunService.Heartbeat:Connect(function()
-                    if not AutoScrapToggle.Enabled then return end
+    if not AutoScrapToggle.Connection then
+        AutoScrapToggle.Connection = RunService.Heartbeat:Connect(function()
+            if not AutoScrapToggle.Enabled then return end
 
-                    local now = tick()
-                    if now - (AutoScrapToggle.LastUpdate or 0) < 0.5 then
-                        return
-                    end
-                    AutoScrapToggle.LastUpdate = now
+            local now = tick()
+            if now - (AutoScrapToggle.LastUpdate or 0) < 0.5 then
+                return
+            end
+            AutoScrapToggle.LastUpdate = now
 
-                    for _, log in ipairs(workspace.Items:GetChildren()) do
-                        if log:IsA("Model") and log.Name == "Log" then
-                            local main = log:FindFirstChild("Main")
-                            if main and main:FindFirstChild("DraggingAttachment") then
-                                RequestStartDraggingItem:FireServer(log)
+            local targetPosition = workspace.Map.Campground.CraftingBench.TouchZone.Position
 
-                                for _, c in ipairs(main:GetChildren()) do
-                                    if c:IsA("AlignPosition") or c:IsA("AngularVelocity") or c:IsA("AlignOrientation") then
-                                        c:Destroy()
-                                    end
-                                end
+            for _, log in ipairs(workspace.Items:GetChildren()) do
+                if log:IsA("Model") and log.Name == "Log" then
+                    local main = log:FindFirstChild("Main")
+                    if main and main:FindFirstChild("DraggingAttachment") then
+                        RequestStartDraggingItem:FireServer(log)
 
-                                for _, part in ipairs(main:GetDescendants()) do
-                                    if part:IsA("BasePart") then
-                                        part.CanCollide = false
-                                    end
-                                end
-
-                                local dragAttach = main:FindFirstChild("DraggingAttachment")
-                                if dragAttach then
-                                    local alignPos = Instance.new("AlignPosition")
-                                    alignPos.Attachment0 = dragAttach
-                                    alignPos.Mode = Enum.PositionAlignmentMode.OneAttachment
-                                    alignPos.Position = workspace.Map.Campground.CraftingBench.TouchZone.Position + Vector3.new(0, 3, 0)
-                                    alignPos.MaxForce = math.huge
-                                    alignPos.Responsiveness = 20000
-                                    alignPos.RigidityEnabled = true
-                                    alignPos.ApplyAtCenterOfMass = true
-                                    alignPos.Parent = main
-
-                                    local alignOri = Instance.new("AlignOrientation")
-                                    alignOri.Attachment0 = dragAttach
-                                    alignOri.Mode = Enum.OrientationAlignmentMode.OneAttachment
-                                    alignOri.MaxTorque = math.huge
-                                    alignOri.Responsiveness = 5000
-                                    alignOri.RigidityEnabled = true
-                                    alignOri.Parent = main
-                                end
+                        for _, c in ipairs(main:GetChildren()) do
+                            if c:IsA("AlignPosition") or c:IsA("AngularVelocity") or c:IsA("AlignOrientation") then
+                                c:Destroy()
                             end
                         end
-                    end
-                end)
-            end
-        elseif AutoScrapToggle.Connection then
-            AutoScrapToggle.Connection:Disconnect()
-            AutoScrapToggle.Connection = nil
-            for _, log in pairs(workspace.Items:GetChildren()) do
-                if log.Name == "Log" and log:FindFirstChild("Main") then
-                    local main = log.Main
-                    for _, c in ipairs(main:GetChildren()) do
-                        if c:IsA("AlignPosition") or c:IsA("AngularVelocity") then
-                            c:Destroy()
+                        for _, part in ipairs(main:GetDescendants()) do
+                            if part:IsA("BasePart") then
+                                part.CanCollide = false
+                            end
+                        end
+
+                        local dragAttach = main:FindFirstChild("DraggingAttachment")
+                        if dragAttach then
+                            local alignPos = Instance.new("AlignPosition")
+                            alignPos.Name = "AutoScrapAlign"
+                            alignPos.Attachment0 = dragAttach
+                            alignPos.Mode = Enum.PositionAlignmentMode.OneAttachment
+                            alignPos.Position = targetPosition + Vector3.new(0, 50, 0) -- start high
+                            alignPos.MaxForce = math.huge
+                            alignPos.Responsiveness = 20000
+                            alignPos.RigidityEnabled = true
+                            alignPos.ApplyAtCenterOfMass = true
+                            alignPos.Parent = main
+
+                            local alignOri = Instance.new("AlignOrientation")
+                            alignOri.Name = "AutoScrapOrientation"
+                            alignOri.Attachment0 = dragAttach
+                            alignOri.Mode = Enum.OrientationAlignmentMode.OneAttachment
+                            alignOri.MaxTorque = math.huge
+                            alignOri.Responsiveness = 5000
+                            alignOri.RigidityEnabled = true
+                            alignOri.Parent = main
+
+                            -- lift then drop
+                            task.spawn(function()
+                                local lifted = false
+                                while log.Parent and AutoScrapToggle.Enabled do
+                                    if not lifted then
+                                        alignPos.Position = targetPosition + Vector3.new(0, 50, 0)
+                                        if (main.Position - targetPosition).Magnitude <= 55 then
+                                            lifted = true
+                                        end
+                                    else
+                                        alignPos.Position = targetPosition + Vector3.new(0, 3, 0)
+                                    end
+                                    task.wait(0.1)
+                                end
+                            end)
                         end
                     end
                 end
             end
+        end)
+    end
+elseif AutoScrapToggle.Connection then
+    AutoScrapToggle.Connection:Disconnect()
+    AutoScrapToggle.Connection = nil
+    for _, log in pairs(workspace.Items:GetChildren()) do
+        if log.Name == "Log" and log:FindFirstChild("Main") then
+            local main = log.Main
+            for _, c in ipairs(main:GetChildren()) do
+                if c:IsA("AlignPosition") or c:IsA("AngularVelocity") or c:IsA("AlignOrientation") then
+                    c:Destroy()
+                end
+            end
         end
+    end
+end
 
-        if AutoScrapAllToggle.Enabled then
+
+if AutoScrapAllToggle.Enabled then
     if not AutoScrapAllToggle.Connection then
         AutoScrapAllToggle.Connection = RunService.Heartbeat:Connect(function()
             local now = tick()
@@ -545,9 +575,9 @@ local function universalLoop()
             local targetPosition = workspace.Map.Campground.CraftingBench.TouchZone.Position
             for _, item in ipairs(workspace.Items:GetChildren()) do
                 if item:IsA("Model") and item:GetAttribute("Scrappable") then
-                    local dragAttach = item:FindFirstChild("DraggingAttachment", true) -- search all descendants
-local main = dragAttach and dragAttach.Parent
-                    if dragAttach and dragAttach:IsA("Attachment") then
+                    local dragAttach = item:FindFirstChild("DraggingAttachment", true)
+                    local main = dragAttach and dragAttach.Parent
+                    if dragAttach and dragAttach:IsA("Attachment") and main then
                         if not main:FindFirstChild("AutoScrapAlign") then
                             RequestStartDraggingItem:FireServer(item)
 
@@ -561,7 +591,7 @@ local main = dragAttach and dragAttach.Parent
                             alignPos.Name = "AutoScrapAlign"
                             alignPos.Attachment0 = dragAttach
                             alignPos.Mode = Enum.PositionAlignmentMode.OneAttachment
-                            alignPos.Position = targetPosition + Vector3.new(0, 50, 0) -- lift first
+                            alignPos.Position = targetPosition + Vector3.new(0, 50, 0) -- start high
                             alignPos.MaxForce = math.huge
                             alignPos.Responsiveness = 20000
                             alignPos.RigidityEnabled = true
@@ -577,12 +607,17 @@ local main = dragAttach and dragAttach.Parent
                             alignOri.RigidityEnabled = true
                             alignOri.Parent = main
 
-                            -- drop when close
+                            -- lift then drop per item
                             task.spawn(function()
+                                local lifted = false
                                 while item.Parent and AutoScrapAllToggle.Enabled do
-                                    if (main.Position - targetPosition).Magnitude <= 35 then
+                                    if not lifted then
+                                        alignPos.Position = targetPosition + Vector3.new(0, 50, 0)
+                                        if (main.Position - targetPosition).Magnitude <= 55 then
+                                            lifted = true
+                                        end
+                                    else
                                         alignPos.Position = targetPosition + Vector3.new(0, 3, 0)
-                                        break
                                     end
                                     task.wait(0.1)
                                 end
@@ -598,8 +633,8 @@ elseif AutoScrapAllToggle.Connection then
     AutoScrapAllToggle.Connection = nil
     for _, item in pairs(workspace.Items:GetChildren()) do
         if item:IsA("Model") and item:GetAttribute("Scrappable") then
-            local dragAttach = item:FindFirstChild("DraggingAttachment", true) -- search all descendants
-local main = dragAttach and dragAttach.Parent
+            local dragAttach = item:FindFirstChild("DraggingAttachment", true)
+            local main = dragAttach and dragAttach.Parent
             if main then
                 for _, c in ipairs(main:GetChildren()) do
                     if c:IsA("AlignPosition") or c:IsA("AlignOrientation") then
@@ -887,6 +922,100 @@ TeleportTab:CreateButton({
             LocalPlayer.Character.HumanoidRootPart.CFrame = workspace.Map.Campground.MainFire.InnerTouchZone.CFrame
         end
     end
+})
+
+-- Landmarks Section
+TeleportTab:CreateSection("Landmarks")
+
+TeleportTab:CreateButton({
+    Name = "Fairy House",
+    Callback = function()
+        LocalPlayer.Character.HumanoidRootPart.CFrame = workspace.Map.Landmarks["Fairy House"]:GetPivot()
+    end
+})
+
+TeleportTab:CreateButton({
+    Name = "Gun Hut",
+    Callback = function()
+        LocalPlayer.Character.HumanoidRootPart.CFrame = workspace.Map.Landmarks["Gun Hut"]:GetPivot()
+    end
+})
+
+TeleportTab:CreateButton({
+    Name = "Basketball Court",
+    Callback = function()
+        LocalPlayer.Character.HumanoidRootPart.CFrame = workspace.Map.Landmarks["Abandoned Basketball Court"]:GetPivot()
+    end
+})
+
+TeleportTab:CreateButton({
+    Name = "Cultist Animal Cages",
+    Callback = function()
+        LocalPlayer.Character.HumanoidRootPart.CFrame = workspace.Map.Landmarks["Cultist Animal Cages"]:GetPivot()
+    end
+})
+
+TeleportTab:CreateButton({
+    Name = "Cultist Watchtower",
+    Callback = function()
+        LocalPlayer.Character.HumanoidRootPart.CFrame = workspace.Map.Landmarks["Cultist Watchtower"]:GetPivot()
+    end
+})
+
+TeleportTab:CreateButton({
+    Name = "Cultist Generator",
+    Callback = function()
+        LocalPlayer.Character.HumanoidRootPart.CFrame = workspace.Map.Landmarks["Cultist Generator Base"].Generator.CFrame
+    end
+})
+
+TeleportTab:CreateButton({
+    Name = "Lava Lake Obby",
+    Callback = function()
+        LocalPlayer.Character.HumanoidRootPart.CFrame = workspace.Map.Landmarks["Lava Lake Obby"]:GetPivot()
+    end
+})
+
+TeleportTab:CreateButton({
+    Name = "Log Cabin",
+    Callback = function()
+        LocalPlayer.Character.HumanoidRootPart.CFrame = workspace.Map.Landmarks["Log Cabin"]:GetPivot()
+    end
+})
+
+-- Lost Children Section
+TeleportTab:CreateSection("Lost Children")
+
+local function tpLostKid(kidId)
+    for _, char in ipairs(workspace.Characters:GetChildren()) do
+        if char:IsA("Model") and char:GetAttribute("KidId") == kidId then
+            local hrp = char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart
+            if hrp then
+                LocalPlayer.Character.HumanoidRootPart.CFrame = hrp.CFrame
+            end
+            break
+        end
+    end
+end
+
+TeleportTab:CreateButton({
+    Name = "Dino Kid",
+    Callback = function() tpLostKid("DinoKid") end
+})
+
+TeleportTab:CreateButton({
+    Name = "Kraken Kid",
+    Callback = function() tpLostKid("KrakenKid") end
+})
+
+TeleportTab:CreateButton({
+    Name = "Squid Kid",
+    Callback = function() tpLostKid("SquidKid") end
+})
+
+TeleportTab:CreateButton({
+    Name = "Koala Kid",
+    Callback = function() tpLostKid("KoalaKid") end
 })
 
 CombatTab:CreateToggle({
